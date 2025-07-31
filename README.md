@@ -2,15 +2,15 @@
 
 A simple Android guitar tuner application that can detect musical notes from audio input.
 
-## ✅ Issues Fixed
+## Issues Fixed
 
 1. **Java Runtime**: Set up Java environment using Android Studio's built-in JDK
 2. **Package Name**: Fixed package name mismatch in MainActivity.kt
 3. **Dependencies**: Added all required dependencies to build.gradle.kts
-4. **Repository**: Added JitPack repository for audio processing libraries
+4. **Repository**: Added JitPack repositony for audio processing libraries
 5. **Build Configuration**: Properly configured the build system
 
-## 🚀 How to Run
+## How to Run
 
 ### Quick Start
 ```bash
@@ -30,13 +30,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 ./gradlew installDebug
 ```
 
-## 📱 App Features
+## App Features
 
 - **Audio Permission**: Requests microphone access for audio input
 - **Modern UI**: Uses Material Design components
 - **Ready for Audio Processing**: Framework ready for pitch detection implementation
 
-## 🔧 Technical Details
+## Technical Details
 
 - **Target SDK**: 36 (Android 14)
 - **Min SDK**: 24 (Android 7.0)
@@ -44,7 +44,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 - **UI Framework**: Jetpack Compose + Traditional Views
 - **Build System**: Gradle with Kotlin DSL
 
-## 📋 TODO
+## TODO
 
 - [ ] Implement actual audio processing (currently using placeholder)
 - [ ] Add pitch detection algorithm
@@ -52,7 +52,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 - [ ] Add note frequency calculations
 - [ ] Add audio library integration (TarsosDSP or alternative)
 
-## 🛠️ Development
+## Development
 
 The app is now ready for development! You can:
 
