@@ -46,11 +46,11 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 ## TODO
 
-- [ ] Implement actual audio processing (currently using placeholder)
-- [ ] Add pitch detection algorithm
-- [ ] Add visual tuner interface
-- [ ] Add note frequency calculations
-- [ ] Add audio library integration (TarsosDSP or alternative)
+- Implement actual audio processing (currently using placeholder)
+- Add pitch detection algorithm
+- Add visual tuner interface
+- Add note frequency calculations
+- Add audio library integration (TarsosDSP or alternative)
 
 ## Development
 
