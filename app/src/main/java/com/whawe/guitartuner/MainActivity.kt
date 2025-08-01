@@ -168,19 +168,44 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun detectPitch(buffer: ShortArray, sampleRate: Int): Float {
-        // Simple pitch detection using zero-crossing rate
-        var crossings = 0
-        for (i in 1 until buffer.size) {
-            if (buffer[i] >= 0 && buffer[i - 1] < 0) {
-                crossings++
+        // Improved pitch detection using autocorrelation
+        val bufferSize = buffer.size
+        if (bufferSize < 1024) return 0f
+        
+        // Calculate RMS to detect if there's enough signal
+        var rms = 0.0
+        for (i in buffer.indices) {
+            rms += buffer[i] * buffer[i]
+        }
+        rms = Math.sqrt(rms / bufferSize)
+        
+        // Only process if signal is strong enough
+        if (rms < 1000) return 0f
+        
+        // Use autocorrelation for better pitch detection
+        val correlation = FloatArray(bufferSize / 2)
+        var maxCorrelation = 0f
+        var maxIndex = 0
+        
+        for (lag in 1 until bufferSize / 2) {
+            var sum = 0f
+            for (i in 0 until bufferSize - lag) {
+                sum += buffer[i] * buffer[i + lag]
+            }
+            correlation[lag] = sum
+            
+            if (sum > maxCorrelation) {
+                maxCorrelation = sum
+                maxIndex = lag
             }
         }
         
-        if (crossings > 0) {
-            val timeLength = buffer.size.toFloat() / sampleRate
-            val frequency = crossings / (2 * timeLength)
+        if (maxIndex > 0) {
+            val frequency = sampleRate.toFloat() / maxIndex
+            // Filter for guitar string frequencies (E2 to E4)
             return if (frequency in 80.0..400.0) frequency else 0f
         }
+        
         return 0f
     }
     
@@ -219,22 +244,38 @@ class MainActivity : AppCompatActivity() {
         frequencyTextView.text = "%.1f Hz".format(frequency)
         
         when {
-            accuracy < 0.05f -> {
+            accuracy < 0.02f -> {
                 accuracyTextView.text = "✓ Perfect!"
                 accuracyTextView.setTextColor(0xFF00FF00.toInt()) // Green
+                noteTextView.setTextColor(0xFF00FF00.toInt()) // Green note when perfect
+            }
+            accuracy < 0.05f -> {
+                accuracyTextView.text = "✓ Very Good"
+                accuracyTextView.setTextColor(0xFF00FF00.toInt()) // Green
+                noteTextView.setTextColor(0xFFFFFFFF.toInt()) // White
             }
             accuracy < 0.1f -> {
                 accuracyTextView.text = "✓ Good"
                 accuracyTextView.setTextColor(0xFFFFFF00.toInt()) // Yellow
+                noteTextView.setTextColor(0xFFFFFFFF.toInt()) // White
             }
             accuracy < 0.2f -> {
                 accuracyTextView.text = "→ Adjust"
                 accuracyTextView.setTextColor(0xFFFFA500.toInt()) // Orange
+                noteTextView.setTextColor(0xFFFFA500.toInt()) // Orange note
             }
             else -> {
                 accuracyTextView.text = "→ Way off"
                 accuracyTextView.setTextColor(0xFFFF0000.toInt()) // Red
+                noteTextView.setTextColor(0xFFFF0000.toInt()) // Red note
             }
+        }
+        
+        // Add cents deviation for more precise feedback
+        val targetFreq = guitarNotes.values.find { abs(frequency - it) < 50 } ?: frequency
+        val cents = 1200 * ln(frequency / targetFreq) / ln(2.0)
+        if (abs(cents) < 50) {
+            frequencyTextView.text = "%.1f Hz (%.0f cents)".format(frequency, cents)
         }
     }
     
@@ -262,7 +303,12 @@ class MainActivity : AppCompatActivity() {
         
         // Calculate accuracy as percentage difference
         val targetFreq = guitarNotes[closestNote] ?: frequency
-        return abs(frequency - targetFreq) / targetFreq
+        val accuracy = abs(frequency - targetFreq) / targetFreq
+        
+        // Log for debugging
+        Log.d(TAG, "Frequency: $frequency Hz, Detected: $detectedNote, Target: $closestNote, Accuracy: $accuracy")
+        
+        return accuracy
     }
     
     override fun onRequestPermissionsResult(
@@ -283,3 +329,4 @@ class MainActivity : AppCompatActivity() {
         stopTuning()
     }
 }
+
