@@ -27,9 +27,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var stopButton: Button
     private lateinit var statusTextView: TextView
     
+    // Tuner dial indicators
+    private lateinit var leftIndicator: View
+    private lateinit var rightIndicator: View
+    private lateinit var centerIndicator: View
+    
     private var audioRecord: AudioRecord? = null
     private var isListening = false
     private var recordingThread: Thread? = null
+    
+    // Frequency smoothing
+    private var lastFrequency = 0f
+    private var frequencyCount = 0
+    private val frequencyHistory = mutableListOf<Float>()
     
     private val TAG = "GuitarTuner"
     
@@ -59,6 +69,11 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         statusTextView = findViewById(R.id.statusTextView)
+        
+        // Initialize tuner dial indicators
+        leftIndicator = findViewById(R.id.leftIndicator)
+        rightIndicator = findViewById(R.id.rightIndicator)
+        centerIndicator = findViewById(R.id.centerIndicator)
     }
     
     private fun setupButtonListeners() {
@@ -90,24 +105,27 @@ class MainActivity : AppCompatActivity() {
         if (isListening) return
         
         try {
-            // Check if we're on emulator (no real microphone)
-            val sampleRate = 44100
+            // Use higher sample rate for better accuracy
+            val sampleRate = 22050 // Lower sample rate for better performance
             val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            
+            Log.d(TAG, "Buffer size: $bufferSize, Sample rate: $sampleRate")
             
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
+                bufferSize * 2 // Larger buffer for better analysis
             )
             
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                // Emulator detected - use demo mode
+                Log.d(TAG, "AudioRecord not initialized, using demo mode")
                 startDemoMode()
                 return
             }
             
+            Log.d(TAG, "AudioRecord initialized successfully")
             audioRecord?.startRecording()
             
             recordingThread = Thread {
@@ -116,14 +134,23 @@ class MainActivity : AppCompatActivity() {
                 while (isListening) {
                     val readSize = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                     if (readSize > 0) {
-                        // Simple pitch detection using zero-crossing rate
+                        // Detect pitch and update UI
                         val frequency = detectPitch(buffer, sampleRate)
                         if (frequency > 0) {
-                            val note = freqToNote(frequency)
-                            val accuracy = calculateAccuracy(frequency, note)
+                            // Smooth frequency detection
+                            val smoothedFrequency = smoothFrequency(frequency)
+                            val note = freqToNote(smoothedFrequency)
+                            val accuracy = calculateAccuracy(smoothedFrequency, note)
                             
                             runOnUiThread {
-                                updateUI(frequency, note, accuracy)
+                                updateUI(smoothedFrequency, note, accuracy)
+                            }
+                        } else {
+                            // Show "No signal" when no frequency detected
+                            runOnUiThread {
+                                noteTextView.text = "Guitar Tuner"
+                                frequencyTextView.text = "No signal"
+                                accuracyTextView.text = ""
                             }
                         }
                     }
@@ -168,11 +195,10 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun detectPitch(buffer: ShortArray, sampleRate: Int): Float {
-        // Improved pitch detection using autocorrelation
         val bufferSize = buffer.size
         if (bufferSize < 1024) return 0f
         
-        // Calculate RMS to detect if there's enough signal
+        // Calculate RMS (Root Mean Square) for signal strength
         var rms = 0.0
         for (i in buffer.indices) {
             rms += buffer[i] * buffer[i]
@@ -180,13 +206,16 @@ class MainActivity : AppCompatActivity() {
         rms = Math.sqrt(rms / bufferSize)
         
         // Only process if signal is strong enough
-        if (rms < 1000) return 0f
+        if (rms < 2000) {
+            return 0f
+        }
         
         // Use autocorrelation for better pitch detection
         val correlation = FloatArray(bufferSize / 2)
         var maxCorrelation = 0f
         var maxIndex = 0
         
+        // Calculate autocorrelation
         for (lag in 1 until bufferSize / 2) {
             var sum = 0f
             for (i in 0 until bufferSize - lag) {
@@ -202,11 +231,35 @@ class MainActivity : AppCompatActivity() {
         
         if (maxIndex > 0) {
             val frequency = sampleRate.toFloat() / maxIndex
-            // Filter for guitar string frequencies (E2 to E4)
-            return if (frequency in 80.0..400.0) frequency else 0f
+            
+            // Filter for guitar frequencies (E2 to E4)
+            if (frequency in 80.0..400.0) {
+                Log.d(TAG, "Detected frequency: $frequency Hz, RMS: $rms")
+                return frequency
+            }
         }
         
         return 0f
+    }
+    
+    private fun smoothFrequency(frequency: Float): Float {
+        // Add to history
+        frequencyHistory.add(frequency)
+        
+        // Keep only last 5 readings
+        if (frequencyHistory.size > 5) {
+            frequencyHistory.removeAt(0)
+        }
+        
+        // Calculate median frequency (more stable than average)
+        val sortedFrequencies = frequencyHistory.sorted()
+        val medianIndex = sortedFrequencies.size / 2
+        
+        return if (sortedFrequencies.size % 2 == 0) {
+            (sortedFrequencies[medianIndex - 1] + sortedFrequencies[medianIndex]) / 2
+        } else {
+            sortedFrequencies[medianIndex]
+        }
     }
     
     private fun stopTuning() {
@@ -243,6 +296,13 @@ class MainActivity : AppCompatActivity() {
         noteTextView.text = note
         frequencyTextView.text = "%.1f Hz".format(frequency)
         
+        // Calculate cents deviation for tuner dial
+        val targetFreq = guitarNotes.values.find { abs(frequency - it) < 50 } ?: frequency
+        val cents = 1200 * ln(frequency / targetFreq) / ln(2.0)
+        
+        // Update tuner dial
+        updateTunerDial(cents)
+        
         when {
             accuracy < 0.02f -> {
                 accuracyTextView.text = "✓ Perfect!"
@@ -272,10 +332,43 @@ class MainActivity : AppCompatActivity() {
         }
         
         // Add cents deviation for more precise feedback
-        val targetFreq = guitarNotes.values.find { abs(frequency - it) < 50 } ?: frequency
-        val cents = 1200 * ln(frequency / targetFreq) / ln(2.0)
         if (abs(cents) < 50) {
             frequencyTextView.text = "%.1f Hz (%.0f cents)".format(frequency, cents)
+        }
+    }
+    
+    private fun updateTunerDial(cents: Double) {
+        // Hide all indicators first
+        leftIndicator.visibility = View.GONE
+        rightIndicator.visibility = View.GONE
+        centerIndicator.visibility = View.GONE
+        
+        when {
+            cents < -20 -> {
+                // Flat - show left indicator
+                leftIndicator.visibility = View.VISIBLE
+                leftIndicator.setBackgroundColor(0xFFFF0000.toInt()) // Red
+            }
+            cents > 20 -> {
+                // Sharp - show right indicator
+                rightIndicator.visibility = View.VISIBLE
+                rightIndicator.setBackgroundColor(0xFFFF0000.toInt()) // Red
+            }
+            abs(cents) <= 5 -> {
+                // Perfect - show center indicator
+                centerIndicator.visibility = View.VISIBLE
+                centerIndicator.setBackgroundColor(0xFF00FF00.toInt()) // Green
+            }
+            cents < 0 -> {
+                // Slightly flat - show left indicator
+                leftIndicator.visibility = View.VISIBLE
+                leftIndicator.setBackgroundColor(0xFFFFFF00.toInt()) // Yellow
+            }
+            else -> {
+                // Slightly sharp - show right indicator
+                rightIndicator.visibility = View.VISIBLE
+                rightIndicator.setBackgroundColor(0xFFFFFF00.toInt()) // Yellow
+            }
         }
     }
     
