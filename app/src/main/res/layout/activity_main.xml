@@ -11,7 +11,7 @@
         android:id="@+id/noteTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Guitar Tuner"
+        android:text="Universal Tuner"
         android:textSize="48sp"
         android:textStyle="bold"
         android:textColor="#FFFFFF"
@@ -122,11 +122,21 @@
         android:textColor="#FFFFFF"
         android:visibility="gone" />
 
+    <Button
+        android:id="@+id/testButton"
+        android:layout_width="200dp"
+        android:layout_height="50dp"
+        android:text="Test Audio"
+        android:textSize="16sp"
+        android:background="@drawable/button_background"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="8dp" />
+
     <TextView
         android:id="@+id/statusTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Tap Start to begin tuning"
+        android:text="Tap Start to begin tuning any instrument"
         android:textSize="16sp"
         android:textColor="#888888"
         android:layout_marginTop="16dp" />
