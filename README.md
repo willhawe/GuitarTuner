@@ -8,6 +8,9 @@ The privacy policy is available at: https://[your-username].github.io/guitar-tun
 
 ## About Guitar Tuner
 
+cid:24E2CFDD-F067-4E64-B8DD-CB29663B8E23<img width="1080" height="2340" alt="image" src="https://github.com/user-attachments/assets/8f0d8216-fdbc-481c-b19e-d8b11a46c6b0" />
+
+
 Guitar Tuner is a professional-grade tuning application for musicians. The app features:
 
 - Real-time pitch detection
