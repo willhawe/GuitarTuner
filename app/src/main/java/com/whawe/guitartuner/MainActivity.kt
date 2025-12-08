@@ -155,7 +155,12 @@ class MainActivity : AppCompatActivity() {
             
             Log.d(TAG, "AudioRecord initialized successfully")
             audioRecord?.startRecording()
-            
+
+            // Flag before starting the thread so the loop actually runs
+            isListening = true
+            updateButtonStates()
+            statusTextView.text = "Listening for any musical note..."
+
             recordingThread = Thread {
                 val buffer = ShortArray(bufferSize * 2) // Larger buffer for analysis
                 var consecutiveNoSignal = 0
@@ -194,11 +199,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             recordingThread?.start()
-            
-            isListening = true
-            updateButtonStates()
-            statusTextView.text = "Listening for any musical note..."
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tuning", e)
             // Fall back to demo mode if audio fails
@@ -598,4 +599,3 @@ class MainActivity : AppCompatActivity() {
         stopTuning()
     }
 }
-
