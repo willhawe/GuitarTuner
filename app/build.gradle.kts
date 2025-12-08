@@ -11,9 +11,29 @@ android {
         applicationId = "com.whawe.guitartuner"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePath = providers.environmentVariable("GT_SIGN_STORE")
+                .orElse(providers.gradleProperty("GT_SIGN_STORE")).orNull
+            val storePasswordValue = providers.environmentVariable("GT_SIGN_STORE_PASS")
+                .orElse(providers.gradleProperty("GT_SIGN_STORE_PASS")).orNull
+            val keyAliasValue = providers.environmentVariable("GT_KEY_ALIAS")
+                .orElse(providers.gradleProperty("GT_KEY_ALIAS")).orNull
+            val keyPasswordValue = providers.environmentVariable("GT_KEY_PASS")
+                .orElse(providers.gradleProperty("GT_KEY_PASS")).orNull
+
+            if (storePath != null && storePasswordValue != null && keyAliasValue != null && keyPasswordValue != null) {
+                storeFile = file(storePath)
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+            }
+        }
     }
 
     buildTypes {
@@ -24,7 +44,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug") // We'll use debug signing for now
+            val releaseConfig = signingConfigs.getByName("release")
+            val releaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+            val releaseReady = releaseConfig.storeFile != null &&
+                releaseConfig.storePassword != null &&
+                releaseConfig.keyAlias != null &&
+                releaseConfig.keyPassword != null
+            if (!releaseReady && releaseTaskRequested) {
+                throw GradleException("Release signing is not configured. Set GT_SIGN_STORE, GT_SIGN_STORE_PASS, GT_KEY_ALIAS, and GT_KEY_PASS.")
+            }
+            signingConfig = releaseConfig
         }
     }
 
