@@ -2,7 +2,9 @@ package com.whawe.guitartuner
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.util.Log
 import android.view.View
 import android.widget.Button
@@ -16,7 +18,9 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import kotlin.math.abs
 import kotlin.math.ln
+import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 class MainActivity : AppCompatActivity() {
 
@@ -33,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var centerIndicator: View
     
     private var audioRecord: AudioRecord? = null
+    @Volatile
     private var isListening = false
     private var recordingThread: Thread? = null
     
@@ -42,6 +47,13 @@ class MainActivity : AppCompatActivity() {
     private val frequencyHistory = mutableListOf<Float>()
     
     private val TAG = "GuitarTuner"
+
+    private data class AudioConfig(
+        val sampleRate: Int,
+        val bufferSizeInBytes: Int,
+        val analysisSize: Int,
+        val audioSource: Int
+    )
     
     // Comprehensive musical note frequencies (C0 to C8)
     private val allNotes = mapOf(
@@ -133,52 +145,52 @@ class MainActivity : AppCompatActivity() {
         if (isListening) return
         
         try {
-            // Use higher sample rate for better accuracy, especially for lower frequencies
-            val sampleRate = 44100 // Increased from 22050 for better low frequency detection
-            val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            
-            Log.d(TAG, "Buffer size: $bufferSize, Sample rate: $sampleRate")
-            
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 4 // Much larger buffer for better low frequency analysis
-            )
-            
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+            val recordResult = createAudioRecord()
+            if (recordResult == null) {
                 Log.d(TAG, "AudioRecord not initialized, using demo mode")
                 startDemoMode()
                 return
             }
-            
-            Log.d(TAG, "AudioRecord initialized successfully")
-            audioRecord?.startRecording()
+            val (record, config) = recordResult
+            audioRecord = record
+
+            Log.d(TAG, "AudioRecord initialized: rate=${config.sampleRate}, buffer=${config.bufferSizeInBytes} bytes, analysis=${config.analysisSize} samples, source=${config.audioSource}")
+            record.startRecording()
+            if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                Log.d(TAG, "AudioRecord failed to start recording, using demo mode")
+                record.release()
+                audioRecord = null
+                startDemoMode()
+                return
+            }
 
             // Flag before starting the thread so the loop actually runs
+            clearFrequencyHistory()
             isListening = true
             updateButtonStates()
             statusTextView.text = "Listening for any musical note..."
 
             recordingThread = Thread {
-                val buffer = ShortArray(bufferSize * 2) // Larger buffer for analysis
+                Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+                val buffer = ShortArray(config.analysisSize)
                 var consecutiveNoSignal = 0
+                var consecutiveReadErrors = 0
                 
                 while (isListening) {
-                    val readSize = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                    val readSize = record.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                     if (readSize > 0) {
+                        consecutiveReadErrors = 0
                         // Detect pitch and update UI
-                        val frequency = detectPitch(buffer, sampleRate)
+                        val frequency = detectPitch(buffer, readSize, config.sampleRate)
                         if (frequency > 0) {
                             consecutiveNoSignal = 0
                             // Smooth frequency detection
                             val smoothedFrequency = smoothFrequency(frequency)
-                            val note = freqToNote(smoothedFrequency)
-                            val accuracy = calculateAccuracy(smoothedFrequency, note)
+                            val (note, targetFreq) = noteInfo(smoothedFrequency)
+                            val centsOff = calculateCentsOff(smoothedFrequency, targetFreq)
                             
                             runOnUiThread {
-                                updateUI(smoothedFrequency, note, accuracy)
+                                updateUI(smoothedFrequency, note, centsOff, targetFreq)
                                 statusTextView.text = "Detecting: ${smoothedFrequency.roundToInt()} Hz"
                             }
                         } else {
@@ -186,6 +198,7 @@ class MainActivity : AppCompatActivity() {
                             // Show "No signal" when no frequency detected
                             runOnUiThread {
                                 if (consecutiveNoSignal > 5) {
+                                    clearFrequencyHistory()
                                     noteTextView.text = "Universal Tuner"
                                     frequencyTextView.text = "No signal"
                                     accuracyTextView.text = ""
@@ -194,7 +207,13 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     } else {
-                        Log.d(TAG, "No audio data read")
+                        consecutiveReadErrors++
+                        Log.d(TAG, "No audio data read: $readSize")
+                        if (consecutiveReadErrors >= 3) {
+                            runOnUiThread {
+                                statusTextView.text = "Audio input error. Check microphone permission."
+                            }
+                        }
                     }
                 }
             }
@@ -218,11 +237,11 @@ class MainActivity : AppCompatActivity() {
             
             while (isListening) {
                 val frequency = demoFrequencies[index % demoFrequencies.size]
-                val note = freqToNote(frequency)
-                val accuracy = calculateAccuracy(frequency, note)
+                val (note, targetFreq) = noteInfo(frequency)
+                val centsOff = calculateCentsOff(frequency, targetFreq)
                 
                 runOnUiThread {
-                    updateUI(frequency, note, accuracy)
+                    updateUI(frequency, note, centsOff, targetFreq)
                 }
                 
                 Thread.sleep(2000) // Change note every 2 seconds
@@ -232,90 +251,89 @@ class MainActivity : AppCompatActivity() {
         recordingThread?.start()
     }
     
-    private fun detectPitch(buffer: ShortArray, sampleRate: Int): Float {
-        val bufferSize = buffer.size
-        if (bufferSize < 1024) return 0f
-        
-        // Calculate RMS (Root Mean Square) for signal strength
-        var rms = 0.0
-        for (i in buffer.indices) {
-            rms += buffer[i] * buffer[i]
+    private fun detectPitch(buffer: ShortArray, size: Int, sampleRate: Int): Float {
+        val actualSize = size.coerceAtMost(buffer.size)
+        if (actualSize < 1024) return 0f
+
+        // Convert to floats and remove DC offset
+        val floatBuf = FloatArray(actualSize)
+        var mean = 0f
+        for (i in 0 until actualSize) {
+            mean += buffer[i]
         }
-        rms = Math.sqrt(rms / bufferSize)
-        
-        // Lower threshold for better sensitivity
-        if (rms < 200) { // Even lower threshold
-            return 0f
+        mean /= actualSize
+
+        var rms = 0f
+        for (i in 0 until actualSize) {
+            val v = buffer[i] - mean
+            floatBuf[i] = v
+            rms += v * v
         }
-        
-        // Try simple peak detection first
-        val simpleFreq = detectSimpleFrequency(buffer, sampleRate)
-        if (simpleFreq > 0) {
-            Log.d(TAG, "Simple detection: $simpleFreq Hz, RMS: $rms")
-            return simpleFreq
-        }
-        
-        // Use zero-crossing rate for initial frequency estimation
-        var zeroCrossings = 0
-        for (i in 1 until bufferSize) {
-            if ((buffer[i] >= 0 && buffer[i - 1] < 0) || (buffer[i] < 0 && buffer[i - 1] >= 0)) {
-                zeroCrossings++
-            }
-        }
-        
-        // Calculate frequency from zero-crossing rate
-        val zeroCrossingFreq = (zeroCrossings * sampleRate) / (2.0 * bufferSize)
-        
-        // Use autocorrelation for refinement
-        val correlation = FloatArray(bufferSize / 2)
-        var maxCorrelation = 0f
-        var maxIndex = 0
-        
-        // Calculate autocorrelation
-        for (lag in 1 until bufferSize / 2) {
+        rms = sqrt(rms / actualSize)
+
+        // Reject very quiet input
+        if (rms < 60f) return 0f
+
+        // YIN pitch detection: more stable than zero-crossing/naive autocorrelation
+        val tauMax = actualSize / 2
+        val difference = FloatArray(tauMax)
+        for (tau in 1 until tauMax) {
             var sum = 0f
-            for (i in 0 until bufferSize - lag) {
-                sum += buffer[i] * buffer[i + lag]
+            var i = 0
+            val limit = actualSize - tau
+            while (i < limit) {
+                val diff = floatBuf[i] - floatBuf[i + tau]
+                sum += diff * diff
+                i++
             }
-            correlation[lag] = sum
-            
-            if (sum > maxCorrelation) {
-                maxCorrelation = sum
-                maxIndex = lag
-            }
+            difference[tau] = sum
         }
-        
-        var frequency = 0f
-        
-        if (maxIndex > 0) {
-            frequency = sampleRate.toFloat() / maxIndex
-        }
-        
-        // Combine zero-crossing and autocorrelation results
-        if (frequency > 0 && zeroCrossingFreq > 0) {
-            // Use the more reliable result
-            val freqDiff = abs(frequency - zeroCrossingFreq)
-            if (freqDiff < 10) { // If they're close, use autocorrelation
-                frequency = frequency
+
+        val cmnd = FloatArray(tauMax)
+        var runningSum = 0f
+        cmnd[0] = 1f
+        for (tau in 1 until tauMax) {
+            runningSum += difference[tau]
+            if (runningSum == 0f) {
+                cmnd[tau] = 1f
             } else {
-                // Use zero-crossing for lower frequencies, autocorrelation for higher
-                if (frequency < 150) {
-                    frequency = zeroCrossingFreq.toFloat()
-                }
+                cmnd[tau] = difference[tau] * tau / runningSum
             }
-        } else if (frequency > 0) {
-            frequency = frequency
-        } else if (zeroCrossingFreq > 0) {
-            frequency = zeroCrossingFreq.toFloat()
         }
-        
-        // Filter for musical frequencies - expanded range for all instruments
-        if (frequency in 15.0..4000.0) { // Covers C0 (16.35 Hz) to C8 (4186 Hz) and beyond
-            Log.d(TAG, "Detected frequency: $frequency Hz, RMS: $rms, Zero-crossing: $zeroCrossingFreq")
-            return frequency
+
+        // Find first minimum under threshold
+        val threshold = 0.12f
+        var tauEstimate = -1
+        var minVal = Float.MAX_VALUE
+        var minTau = -1
+        for (tau in 2 until tauMax) {
+            if (cmnd[tau] < threshold && cmnd[tau] < cmnd[tau - 1]) {
+                tauEstimate = tau
+                break
+            }
+            if (cmnd[tau] < minVal) {
+                minVal = cmnd[tau]
+                minTau = tau
+            }
         }
-        
-        return 0f
+        if (tauEstimate == -1) {
+            if (minTau > 0 && minVal < 0.25f) {
+                tauEstimate = minTau
+            }
+        }
+
+        if (tauEstimate <= 0) return 0f
+
+        // Parabolic interpolation for finer estimate
+        val prev = if (tauEstimate > 1) cmnd[tauEstimate - 1] else cmnd[tauEstimate]
+        val next = if (tauEstimate + 1 < tauMax) cmnd[tauEstimate + 1] else cmnd[tauEstimate]
+        val denom = 2 * (2 * cmnd[tauEstimate] - prev - next)
+        val betterTau = if (denom != 0f) {
+            tauEstimate + (next - prev) / denom
+        } else tauEstimate.toFloat()
+
+        val freq = sampleRate / betterTau
+        return if (freq in 15f..4000f) freq else 0f
     }
     
     private fun detectSimpleFrequency(buffer: ShortArray, sampleRate: Int): Float {
@@ -376,6 +394,10 @@ class MainActivity : AppCompatActivity() {
             sortedFrequencies[medianIndex]
         }
     }
+
+    private fun clearFrequencyHistory() {
+        frequencyHistory.clear()
+    }
     
     private fun stopTuning() {
         try {
@@ -385,6 +407,7 @@ class MainActivity : AppCompatActivity() {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
+            clearFrequencyHistory()
             updateButtonStates()
             
             noteTextView.text = "Guitar Tuner"
@@ -407,49 +430,44 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun updateUI(frequency: Float, note: String, accuracy: Float) {
+    private fun updateUI(frequency: Float, note: String, centsOff: Double, targetFreq: Float) {
         noteTextView.text = note
         frequencyTextView.text = "%.1f Hz".format(frequency)
-        
-        // Calculate cents deviation for tuner dial
-        val targetFreq = allNotes.values.find { abs(frequency - it) < 50 } ?: frequency
-        val cents = 1200 * ln(frequency / targetFreq) / ln(2.0)
-        
+
         // Update tuner dial
-        updateTunerDial(cents)
-        
+        updateTunerDial(centsOff)
+
+        val centsAbs = abs(centsOff)
         when {
-            accuracy < 0.02f -> {
+            centsAbs <= 5 -> {
                 accuracyTextView.text = "✓ Perfect!"
                 accuracyTextView.setTextColor(0xFF00FF00.toInt()) // Green
-                noteTextView.setTextColor(0xFF00FF00.toInt()) // Green note when perfect
+                noteTextView.setTextColor(0xFF00FF00.toInt())
             }
-            accuracy < 0.05f -> {
+            centsAbs <= 10 -> {
                 accuracyTextView.text = "✓ Very Good"
-                accuracyTextView.setTextColor(0xFF00FF00.toInt()) // Green
-                noteTextView.setTextColor(0xFFFFFFFF.toInt()) // White
+                accuracyTextView.setTextColor(0xFF00FF00.toInt())
+                noteTextView.setTextColor(0xFFFFFFFF.toInt())
             }
-            accuracy < 0.1f -> {
+            centsAbs <= 20 -> {
                 accuracyTextView.text = "✓ Good"
-                accuracyTextView.setTextColor(0xFFFFFF00.toInt()) // Yellow
-                noteTextView.setTextColor(0xFFFFFFFF.toInt()) // White
+                accuracyTextView.setTextColor(0xFFFFFF00.toInt())
+                noteTextView.setTextColor(0xFFFFFFFF.toInt())
             }
-            accuracy < 0.2f -> {
+            centsAbs <= 35 -> {
                 accuracyTextView.text = "→ Adjust"
-                accuracyTextView.setTextColor(0xFFFFA500.toInt()) // Orange
-                noteTextView.setTextColor(0xFFFFA500.toInt()) // Orange note
+                accuracyTextView.setTextColor(0xFFFFA500.toInt())
+                noteTextView.setTextColor(0xFFFFA500.toInt())
             }
             else -> {
                 accuracyTextView.text = "→ Way off"
-                accuracyTextView.setTextColor(0xFFFF0000.toInt()) // Red
-                noteTextView.setTextColor(0xFFFF0000.toInt()) // Red note
+                accuracyTextView.setTextColor(0xFFFF0000.toInt())
+                noteTextView.setTextColor(0xFFFF0000.toInt())
             }
         }
-        
-        // Add cents deviation for more precise feedback
-        if (abs(cents) < 50) {
-            frequencyTextView.text = "%.1f Hz (%.0f cents)".format(frequency, cents)
-        }
+
+        // Show cents deviation for precise feedback
+        frequencyTextView.text = "%.1f Hz (%.0f cents, target %.1f Hz)".format(frequency, centsOff, targetFreq)
     }
     
     private fun updateTunerDial(cents: Double) {
@@ -487,36 +505,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun freqToNote(freq: Float): String {
+    private fun noteInfo(freq: Float): Pair<String, Float> {
+        if (freq <= 0f) return "--" to 0f
         val A4 = 440.0
         val noteNames = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
         val noteNumber = (12 * (ln(freq / A4) / ln(2.0))).roundToInt() + 69
-        val noteName = noteNames[noteNumber % 12]
+        val safeIndex = ((noteNumber % 12) + 12) % 12
+        val noteName = noteNames[safeIndex]
         val octave = noteNumber / 12 - 1
-        return "$noteName$octave"
+        val targetFreq = 440f * kotlin.math.exp(kotlin.math.ln(2f) * (noteNumber - 69) / 12f)
+        return "$noteName$octave" to targetFreq
     }
-    
-    private fun calculateAccuracy(frequency: Float, detectedNote: String): Float {
-        // Find the closest guitar note
-        var closestNote = ""
-        var minDifference = Float.MAX_VALUE
-        
-        for ((note, noteFreq) in allNotes) {
-            val difference = abs(frequency - noteFreq)
-            if (difference < minDifference) {
-                minDifference = difference
-                closestNote = note
-            }
-        }
-        
-        // Calculate accuracy as percentage difference
-        val targetFreq = allNotes[closestNote] ?: frequency
-        val accuracy = abs(frequency - targetFreq) / targetFreq
-        
-        // Log for debugging
-        Log.d(TAG, "Frequency: $frequency Hz, Detected: $detectedNote, Target: $closestNote, Accuracy: $accuracy")
-        
-        return accuracy
+
+    private fun calculateCentsOff(frequency: Float, targetFreq: Float): Double {
+        if (frequency <= 0 || targetFreq <= 0) return 0.0
+        return 1200 * ln(frequency / targetFreq) / ln(2.0)
     }
     
     private fun testAudioInput() {
@@ -524,32 +527,30 @@ class MainActivity : AppCompatActivity() {
         
         Thread {
             try {
-                val sampleRate = 44100 // Match the main tuning sample rate
-                val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-                
-                val testAudioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSize
-                )
+                val recordResult = createAudioRecord()
+                if (recordResult == null) {
+                    runOnUiThread {
+                        statusTextView.text = "AudioRecord failed to initialize"
+                    }
+                    return@Thread
+                }
+                val (testAudioRecord, config) = recordResult
                 
                 if (testAudioRecord.state == AudioRecord.STATE_INITIALIZED) {
                     testAudioRecord.startRecording()
-                    val buffer = ShortArray(bufferSize)
+                    val buffer = ShortArray(config.analysisSize)
                     
                     for (i in 1..10) {
-                        val readSize = testAudioRecord.read(buffer, 0, buffer.size)
+                        val readSize = testAudioRecord.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                         if (readSize > 0) {
                             var rms = 0.0
-                            for (j in buffer.indices) {
+                            for (j in 0 until readSize) {
                                 rms += buffer[j] * buffer[j]
                             }
-                            rms = Math.sqrt(rms / bufferSize)
+                            rms = Math.sqrt(rms / readSize)
                             
                             // Try to detect frequency
-                            val frequency = detectPitch(buffer, sampleRate)
+                            val frequency = detectPitch(buffer, readSize, config.sampleRate)
                             
                             runOnUiThread {
                                 if (frequency > 0) {
@@ -579,6 +580,42 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }.start()
+    }
+
+    private fun createAudioRecord(): Pair<AudioRecord, AudioConfig>? {
+        val sampleRates = intArrayOf(48000, 44100, 32000, 22050, 16000)
+        val sources = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            intArrayOf(MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.MIC)
+        } else {
+            intArrayOf(MediaRecorder.AudioSource.MIC)
+        }
+
+        for (source in sources) {
+            for (rate in sampleRates) {
+                val minBuffer = AudioRecord.getMinBufferSize(
+                    rate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                )
+                if (minBuffer <= 0) continue
+
+                val analysisSize = if (rate >= 44100) 4096 else 2048
+                val bufferSizeInBytes = max(minBuffer, analysisSize * 2)
+
+                val record = AudioRecord(
+                    source,
+                    rate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSizeInBytes
+                )
+                if (record.state == AudioRecord.STATE_INITIALIZED) {
+                    return record to AudioConfig(rate, bufferSizeInBytes, analysisSize, source)
+                }
+                record.release()
+            }
+        }
+        return null
     }
     
     override fun onRequestPermissionsResult(
