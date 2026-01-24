@@ -143,12 +143,23 @@ class MainActivity : AppCompatActivity() {
     
     private fun startTuning() {
         if (isListening) return
-        
+
+        clearFrequencyHistory()
+        isListening = true
+        runOnUiThread {
+            if (isListening) {
+                updateButtonStates()
+                statusTextView.text = "Listening for any musical note..."
+            }
+        }
+
         try {
             val recordResult = createAudioRecord()
             if (recordResult == null) {
                 Log.d(TAG, "AudioRecord not initialized, using demo mode")
-                startDemoMode()
+                if (isListening) {
+                    startDemoMode()
+                }
                 return
             }
             val (record, config) = recordResult
@@ -160,15 +171,18 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "AudioRecord failed to start recording, using demo mode")
                 record.release()
                 audioRecord = null
-                startDemoMode()
+                if (isListening) {
+                    startDemoMode()
+                }
                 return
             }
 
-            // Flag before starting the thread so the loop actually runs
-            clearFrequencyHistory()
-            isListening = true
-            updateButtonStates()
-            statusTextView.text = "Listening for any musical note..."
+            if (!isListening) {
+                record.stop()
+                record.release()
+                audioRecord = null
+                return
+            }
 
             recordingThread = Thread {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
@@ -222,14 +236,18 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tuning", e)
             // Fall back to demo mode if audio fails
-            startDemoMode()
+            if (isListening) {
+                startDemoMode()
+            }
         }
     }
     
     private fun startDemoMode() {
         isListening = true
-        updateButtonStates()
-        statusTextView.text = "Demo mode - simulating musical notes..."
+        runOnUiThread {
+            updateButtonStates()
+            statusTextView.text = "Demo mode - simulating musical notes..."
+        }
         
         recordingThread = Thread {
             val demoFrequencies = listOf(261.63f, 329.63f, 440.00f, 523.25f, 659.25f, 880.00f) // C4, E4, A4, C5, E5, A5
@@ -272,7 +290,7 @@ class MainActivity : AppCompatActivity() {
         rms = sqrt(rms / actualSize)
 
         // Reject very quiet input
-        if (rms < 60f) return 0f
+        if (rms < 30f) return 0f
 
         // YIN pitch detection: more stable than zero-crossing/naive autocorrelation
         val tauMax = actualSize / 2
