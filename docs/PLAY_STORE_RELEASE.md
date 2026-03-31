@@ -4,8 +4,8 @@
 
 - App name: `Bleat Guitar Tuner`
 - Package name: `com.whawe.guitartuner`
-- Version name: `1.4`
-- Version code: `5`
+- Version name: `1.5`
+- Version code: `6`
 
 ## Assets
 
