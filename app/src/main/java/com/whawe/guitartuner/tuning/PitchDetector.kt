@@ -54,15 +54,26 @@ object PitchDetector {
             }
         }
 
-        val threshold = 0.12f
+        val threshold = 0.10f
         var tauEstimate = -1
         var minimumValue = Float.MAX_VALUE
         var minimumTau = -1
 
-        for (tau in 2 until tauMax) {
+        var tau = 2
+        while (tau < tauMax) {
             val currentValue = cumulativeMeanNormalizedDifference[tau]
-            if (currentValue < threshold && currentValue < cumulativeMeanNormalizedDifference[tau - 1]) {
-                tauEstimate = tau
+            if (currentValue < threshold) {
+                var localMinimumTau = tau
+                var localMinimumValue = currentValue
+
+                while (localMinimumTau + 1 < tauMax &&
+                    cumulativeMeanNormalizedDifference[localMinimumTau + 1] <= localMinimumValue
+                ) {
+                    localMinimumTau++
+                    localMinimumValue = cumulativeMeanNormalizedDifference[localMinimumTau]
+                }
+
+                tauEstimate = localMinimumTau
                 break
             }
 
@@ -70,6 +81,8 @@ object PitchDetector {
                 minimumValue = currentValue
                 minimumTau = tau
             }
+
+            tau++
         }
 
         if (tauEstimate == -1 && minimumTau > 0 && minimumValue < 0.25f) {

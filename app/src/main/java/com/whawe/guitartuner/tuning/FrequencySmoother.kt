@@ -1,31 +1,58 @@
 package com.whawe.guitartuner.tuning
 
+import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.ln
+
 class FrequencySmoother(
-    private val windowSize: Int = 5
+    private val stableAlpha: Float = 0.18f,
+    private val responsiveAlpha: Float = 0.35f,
+    private val fastAlpha: Float = 0.60f,
+    private val stableThresholdCents: Float = 10f,
+    private val fastThresholdCents: Float = 35f
 ) {
-    private val history = ArrayDeque<Float>()
+    private var smoothedLogFrequency: Double? = null
 
     init {
-        require(windowSize > 0) { "windowSize must be positive" }
+        require(stableAlpha in 0f..1f) { "stableAlpha must be between 0 and 1" }
+        require(responsiveAlpha in 0f..1f) { "responsiveAlpha must be between 0 and 1" }
+        require(fastAlpha in 0f..1f) { "fastAlpha must be between 0 and 1" }
+        require(stableThresholdCents > 0f) { "stableThresholdCents must be positive" }
+        require(fastThresholdCents > stableThresholdCents) {
+            "fastThresholdCents must be greater than stableThresholdCents"
+        }
     }
 
     fun add(frequency: Float): Float {
-        history.addLast(frequency)
-        while (history.size > windowSize) {
-            history.removeFirst()
+        if (frequency <= 0f) {
+            return 0f
         }
 
-        val sorted = history.sorted()
-        val medianIndex = sorted.size / 2
-
-        return if (sorted.size % 2 == 0) {
-            (sorted[medianIndex - 1] + sorted[medianIndex]) / 2
-        } else {
-            sorted[medianIndex]
+        val logFrequency = ln(frequency.toDouble())
+        val previous = smoothedLogFrequency
+        if (previous == null) {
+            smoothedLogFrequency = logFrequency
+            return frequency
         }
+
+        val centsDelta = abs((logFrequency - previous) * CENTS_PER_OCTAVE / LN_2)
+        val alpha = when {
+            centsDelta <= stableThresholdCents -> stableAlpha.toDouble()
+            centsDelta >= fastThresholdCents -> fastAlpha.toDouble()
+            else -> responsiveAlpha.toDouble()
+        }
+
+        val smoothed = previous + (logFrequency - previous) * alpha
+        smoothedLogFrequency = smoothed
+        return exp(smoothed).toFloat()
     }
 
     fun clear() {
-        history.clear()
+        smoothedLogFrequency = null
+    }
+
+    private companion object {
+        const val CENTS_PER_OCTAVE = 1200.0
+        val LN_2 = ln(2.0)
     }
 }

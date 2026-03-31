@@ -20,7 +20,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.whawe.guitartuner.tuning.AccuracyBand
-import com.whawe.guitartuner.tuning.DialIndicator
 import com.whawe.guitartuner.tuning.FrequencySmoother
 import com.whawe.guitartuner.tuning.NoteMapper
 import com.whawe.guitartuner.tuning.NoteMatch
@@ -38,9 +37,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var stopButton: Button
     private lateinit var statusTextView: TextView
 
-    private lateinit var leftIndicator: View
-    private lateinit var rightIndicator: View
-    private lateinit var centerIndicator: View
+    private lateinit var tunerDial: View
+    private lateinit var needleIndicator: View
 
     private var audioRecord: AudioRecord? = null
 
@@ -79,9 +77,8 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         statusTextView = findViewById(R.id.statusTextView)
-        leftIndicator = findViewById(R.id.leftIndicator)
-        rightIndicator = findViewById(R.id.rightIndicator)
-        centerIndicator = findViewById(R.id.centerIndicator)
+        tunerDial = findViewById(R.id.tunerDial)
+        needleIndicator = findViewById(R.id.needleIndicator)
     }
 
     private fun setupButtonListeners() {
@@ -285,7 +282,7 @@ class MainActivity : AppCompatActivity() {
         frequencyTextView.text = getString(R.string.frequency_placeholder)
         accuracyTextView.text = ""
         statusTextView.text = getString(R.string.status_idle)
-        hideDialIndicators()
+        resetTunerDial()
     }
 
     private fun renderStoppedState() {
@@ -300,7 +297,7 @@ class MainActivity : AppCompatActivity() {
         frequencyTextView.text = getString(R.string.no_signal)
         accuracyTextView.text = ""
         statusTextView.text = getString(R.string.status_listening)
-        hideDialIndicators()
+        resetTunerDial()
     }
 
     private fun renderTuning(frequency: Float, noteMatch: NoteMatch, centsOff: Double) {
@@ -318,7 +315,7 @@ class MainActivity : AppCompatActivity() {
             noteMatch.targetFrequency
         )
 
-        updateTunerDial(feedback)
+        updateTunerDial(feedback, style.accuracyColor)
     }
 
     private fun feedbackStyle(accuracyBand: AccuracyBand): FeedbackStyle {
@@ -351,42 +348,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateTunerDial(feedback: TuningFeedback) {
-        hideDialIndicators()
+    private fun updateTunerDial(feedback: TuningFeedback, @ColorInt needleColor: Int) {
+        val applyNeedlePosition = {
+            val travelRange = (((tunerDial.width - needleIndicator.width) / 2f) -
+                dpToPx(DIAL_EDGE_PADDING_DP)).coerceAtLeast(0f)
+            val targetTranslation = travelRange * feedback.needleOffset
 
-        when (feedback.dialIndicator) {
-            DialIndicator.LEFT_WARNING -> {
-                leftIndicator.visibility = View.VISIBLE
-                leftIndicator.setBackgroundColor(getColorCompat(R.color.tuner_red))
-            }
-            DialIndicator.LEFT_CAUTION -> {
-                leftIndicator.visibility = View.VISIBLE
-                leftIndicator.setBackgroundColor(getColorCompat(R.color.tuner_yellow))
-            }
-            DialIndicator.CENTER_IN_TUNE -> {
-                centerIndicator.visibility = View.VISIBLE
-                centerIndicator.setBackgroundColor(getColorCompat(R.color.tuner_green))
-            }
-            DialIndicator.RIGHT_CAUTION -> {
-                rightIndicator.visibility = View.VISIBLE
-                rightIndicator.setBackgroundColor(getColorCompat(R.color.tuner_yellow))
-            }
-            DialIndicator.RIGHT_WARNING -> {
-                rightIndicator.visibility = View.VISIBLE
-                rightIndicator.setBackgroundColor(getColorCompat(R.color.tuner_red))
-            }
+            needleIndicator.visibility = View.VISIBLE
+            needleIndicator.setBackgroundColor(needleColor)
+            needleIndicator.animate()
+                .translationX(targetTranslation)
+                .setDuration(NEEDLE_ANIMATION_DURATION_MS)
+                .start()
+        }
+
+        if (tunerDial.width == 0) {
+            tunerDial.post { applyNeedlePosition() }
+        } else {
+            applyNeedlePosition()
         }
     }
 
-    private fun hideDialIndicators() {
-        leftIndicator.visibility = View.GONE
-        rightIndicator.visibility = View.GONE
-        centerIndicator.visibility = View.GONE
+    private fun resetTunerDial() {
+        needleIndicator.animate().cancel()
+        needleIndicator.translationX = 0f
+        needleIndicator.visibility = View.GONE
     }
 
     @ColorInt
     private fun getColorCompat(@ColorRes colorRes: Int): Int {
         return ContextCompat.getColor(this, colorRes)
+    }
+
+    private fun dpToPx(dp: Float): Float {
+        return dp * resources.displayMetrics.density
     }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
@@ -462,6 +457,8 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val AUDIO_PERMISSION_REQUEST_CODE = 100
         const val DEMO_MODE_INTERVAL_MS = 1500L
+        const val DIAL_EDGE_PADDING_DP = 42f
+        const val NEEDLE_ANIMATION_DURATION_MS = 60L
         const val TAG = "GuitarTuner"
     }
 }

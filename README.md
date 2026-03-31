@@ -13,7 +13,7 @@ Get the app on Google Play: <https://play.google.com/store/apps/details?id=com.w
 ## Highlights
 
 - Real-time pitch detection using a YIN-style estimator over PCM microphone input
-- Chromatic note mapping with cents deviation and tuner-dial feedback
+- Chromatic note mapping with cents deviation and a continuous tuner needle
 - Median smoothing to stabilize noisy real-world readings
 - Demo fallback for environments where microphone capture is unavailable
 - No ads, no in-app upsell flow, and no locked "premium" tuning features
@@ -23,7 +23,7 @@ Get the app on Google Play: <https://play.google.com/store/apps/details?id=com.w
 
 - `MainActivity` owns Android lifecycle, permission handling, and view binding
 - `PitchDetector` implements the YIN-style pitch estimator over raw `ShortArray` PCM frames
-- `FrequencySmoother` keeps a rolling median window for more stable note presentation
+- `FrequencySmoother` applies adaptive log-scale smoothing for stable but responsive note presentation
 - `NoteMapper` converts detected frequencies into note names and target frequencies
 - `TuningFeedbackEvaluator` maps cents deviation into user-facing tuning states
 

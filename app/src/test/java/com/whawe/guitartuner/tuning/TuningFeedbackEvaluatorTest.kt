@@ -22,18 +22,18 @@ class TuningFeedbackEvaluatorTest {
     }
 
     @Test
-    fun fromCents_mapsDialDirectionAndSeverity() {
+    fun fromCents_mapsNeedleOffsetAcrossVisibleRange() {
         val cases = listOf(
-            -30.0 to DialIndicator.LEFT_WARNING,
-            -8.0 to DialIndicator.LEFT_CAUTION,
-            0.0 to DialIndicator.CENTER_IN_TUNE,
-            12.0 to DialIndicator.RIGHT_CAUTION,
-            28.0 to DialIndicator.RIGHT_WARNING
+            -75.0 to -1.0f,
+            -25.0 to -0.5f,
+            0.0 to 0.0f,
+            12.5 to 0.25f,
+            60.0 to 1.0f
         )
 
-        for ((cents, expectedIndicator) in cases) {
+        for ((cents, expectedOffset) in cases) {
             val feedback = TuningFeedbackEvaluator.fromCents(cents)
-            assertEquals(expectedIndicator, feedback.dialIndicator)
+            assertEquals(expectedOffset, feedback.needleOffset, 0.0001f)
         }
     }
 }

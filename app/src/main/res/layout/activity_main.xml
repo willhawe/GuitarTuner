@@ -30,6 +30,7 @@
 
     <!-- Tuner Dial -->
     <FrameLayout
+        android:id="@+id/tunerDial"
         android:layout_width="300dp"
         android:layout_height="150dp"
         android:layout_marginBottom="16dp"
@@ -42,31 +43,11 @@
             android:layout_gravity="center"
             android:background="@color/text_primary" />
 
-        <!-- Left indicator (flat) -->
+        <!-- Moving tuning needle -->
         <View
-            android:id="@+id/leftIndicator"
-            android:layout_width="3dp"
-            android:layout_height="40dp"
-            android:layout_gravity="center_vertical"
-            android:layout_marginStart="60dp"
-            android:background="@color/tuner_red"
-            android:visibility="gone" />
-
-        <!-- Right indicator (sharp) -->
-        <View
-            android:id="@+id/rightIndicator"
-            android:layout_width="3dp"
-            android:layout_height="40dp"
-            android:layout_gravity="center_vertical"
-            android:layout_marginStart="240dp"
-            android:background="@color/tuner_red"
-            android:visibility="gone" />
-
-        <!-- Centered indicator (in tune) -->
-        <View
-            android:id="@+id/centerIndicator"
-            android:layout_width="4dp"
-            android:layout_height="50dp"
+            android:id="@+id/needleIndicator"
+            android:layout_width="6dp"
+            android:layout_height="72dp"
             android:layout_gravity="center"
             android:background="@color/tuner_green"
             android:visibility="gone" />

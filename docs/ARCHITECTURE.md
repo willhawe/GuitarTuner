@@ -8,7 +8,7 @@ Keep Android framework code thin and move the tuner's behavior into deterministi
 
 1. `MainActivity` requests microphone permission and creates `AudioRecord`.
 2. Raw PCM frames are passed to `PitchDetector`.
-3. `FrequencySmoother` applies a rolling median to reduce jitter.
+3. `FrequencySmoother` applies adaptive log-scale smoothing to reduce jitter without freezing gradual pitch changes.
 4. `NoteMapper` resolves the closest note and target frequency.
 5. `TuningFeedbackEvaluator` converts cents deviation into UI feedback bands.
 6. `MainActivity` renders the resulting state into the dial, note label, and status text.
@@ -24,9 +24,9 @@ Keep Android framework code thin and move the tuner's behavior into deterministi
 
 ### `FrequencySmoother`
 
-- Maintains a bounded rolling window
-- Uses the median rather than the mean
-- Keeps transient spikes from destabilizing the UI
+- Smooths in log-frequency space so cents-scale changes behave consistently across notes
+- Uses adaptive response speeds to stay stable near the target while remaining responsive to larger pitch changes
+- Keeps transient spikes from destabilizing the UI without introducing median-window stair-stepping
 
 ### `NoteMapper`
 
@@ -36,7 +36,7 @@ Keep Android framework code thin and move the tuner's behavior into deterministi
 
 ### `TuningFeedbackEvaluator`
 
-- Maps cents thresholds into accuracy bands and dial directions
+- Maps cents thresholds into accuracy bands and a normalized needle offset
 - Centralizes feedback thresholds so they can be tuned and regression-tested
 
 ## Why This Split Matters

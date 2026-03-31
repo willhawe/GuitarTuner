@@ -10,17 +10,9 @@ enum class AccuracyBand {
     WAY_OFF
 }
 
-enum class DialIndicator {
-    LEFT_WARNING,
-    LEFT_CAUTION,
-    CENTER_IN_TUNE,
-    RIGHT_CAUTION,
-    RIGHT_WARNING
-}
-
 data class TuningFeedback(
     val accuracyBand: AccuracyBand,
-    val dialIndicator: DialIndicator
+    val needleOffset: Float
 )
 
 object TuningFeedbackEvaluator {
@@ -34,17 +26,13 @@ object TuningFeedbackEvaluator {
             else -> AccuracyBand.WAY_OFF
         }
 
-        val dialIndicator = when {
-            cents < -20 -> DialIndicator.LEFT_WARNING
-            cents > 20 -> DialIndicator.RIGHT_WARNING
-            absoluteCents <= 5 -> DialIndicator.CENTER_IN_TUNE
-            cents < 0 -> DialIndicator.LEFT_CAUTION
-            else -> DialIndicator.RIGHT_CAUTION
-        }
+        val needleOffset = (cents / MAX_VISIBLE_CENTS).coerceIn(-1.0, 1.0).toFloat()
 
         return TuningFeedback(
             accuracyBand = accuracyBand,
-            dialIndicator = dialIndicator
+            needleOffset = needleOffset
         )
     }
+
+    private const val MAX_VISIBLE_CENTS = 50.0
 }
