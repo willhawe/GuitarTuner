@@ -4,6 +4,8 @@
 *.dmg
 *.jks
 *.keystore
+.env
+.env.*
 .DS_Store
 .gradle/
 .idea/
