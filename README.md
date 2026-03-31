@@ -6,6 +6,10 @@ Bleat Guitar Tuner is an Android guitar tuner with on-device pitch detection, ce
 
 Get the app on Google Play: <https://play.google.com/store/apps/details?id=com.whawe.guitartuner>
 
+## Demo
+
+<img src="docs/assets/bleat-tuner-demo.gif" alt="Bleat Guitar Tuner demo" width="320" />
+
 ## Highlights
 
 - Real-time pitch detection using a YIN-style estimator over PCM microphone input

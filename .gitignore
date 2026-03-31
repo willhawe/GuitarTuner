@@ -6,6 +6,7 @@
 *.keystore
 .env
 .env.*
+Screen_Recording_*.mp4
 .DS_Store
 .gradle/
 .idea/
