@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Guitar Tuner</string>
+    <string name="app_name">Bleat Guitar Tuner</string>
     <string name="frequency_placeholder">0.0 Hz</string>
     <string name="no_signal">No signal</string>
     <string name="button_start">Start Tuning</string>

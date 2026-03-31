@@ -2,14 +2,14 @@
 
 ## Current App Metadata
 
-- App name: `Guitar Tuner`
+- App name: `Bleat Guitar Tuner`
 - Package name: `com.whawe.guitartuner`
 - Version name: `1.4`
 - Version code: `5`
 
 ## Assets
 
-- Feature graphic: [`docs/assets/feature-graphic.png`](assets/feature-graphic.png)
+- Feature graphic: [`docs/assets/feature-graphic.jpeg`](assets/feature-graphic.jpeg)
 - Upload certificate: [`docs/play-store/upload_cert.pem`](play-store/upload_cert.pem)
 - Design-source artwork: [`docs/assets/design-source`](assets/design-source)
 - Privacy policy source: [PRIVACY_POLICY.md](../PRIVACY_POLICY.md)
@@ -23,7 +23,7 @@
 
 ## Suggested Listing Summary
 
-- Title: `Guitar Tuner`
+- Title: `Bleat Guitar Tuner`
 - Category: `Music & Audio`
 - Positioning: privacy-first on-device tuner with chromatic note detection and visual feedback
 

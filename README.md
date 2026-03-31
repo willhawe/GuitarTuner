@@ -1,8 +1,8 @@
-# Guitar Tuner
+# Bleat Guitar Tuner
 
-![Guitar Tuner feature graphic](docs/assets/feature-graphic.png)
+![Bleat Guitar Tuner feature graphic](docs/assets/feature-graphic.jpeg)
 
-Android guitar tuner with on-device pitch detection, cents-based tuning feedback, and a deliberately testable core. The original goal of the project was straightforward: build a tuner that is actually pleasant to use, with no ads and no nags to unlock basic functionality behind paywalls. The repository is structured to be readable as a portfolio project: the signal-processing logic lives in pure Kotlin classes, the Android shell is thin, and the project is set up for CI-backed verification.
+Bleat Guitar Tuner is an Android guitar tuner with on-device pitch detection, cents-based tuning feedback, and a deliberately testable core. The original goal of the project was straightforward: build a tuner that is actually pleasant to use, with no ads and no nags to unlock basic functionality behind paywalls. The repository is structured to be readable as a portfolio project: the signal-processing logic lives in pure Kotlin classes, the Android shell is thin, and the project is set up for CI-backed verification.
 
 ## Highlights
 

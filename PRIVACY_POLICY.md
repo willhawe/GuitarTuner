@@ -1,9 +1,9 @@
-# Privacy Policy for Guitar Tuner
+# Privacy Policy for Bleat Guitar Tuner
 
 **Last updated:** March 31, 2026
 
 ## Overview
-Guitar Tuner is a simple audio tuning application that helps musicians tune their guitars and other stringed instruments.
+Bleat Guitar Tuner is a simple audio tuning application that helps musicians tune their guitars and other stringed instruments.
 
 ## Information We Collect
 - **Microphone Access**: The app requests microphone permission to detect audio frequencies for tuning purposes
