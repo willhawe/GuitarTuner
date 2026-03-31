@@ -2,6 +2,9 @@ package com.whawe.guitartuner
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -10,43 +13,42 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.ColorInt
+import androidx.annotation.ColorRes
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
-import kotlin.math.abs
-import kotlin.math.ln
+import com.whawe.guitartuner.tuning.AccuracyBand
+import com.whawe.guitartuner.tuning.DialIndicator
+import com.whawe.guitartuner.tuning.FrequencySmoother
+import com.whawe.guitartuner.tuning.NoteMapper
+import com.whawe.guitartuner.tuning.NoteMatch
+import com.whawe.guitartuner.tuning.PitchDetector
+import com.whawe.guitartuner.tuning.TuningFeedback
+import com.whawe.guitartuner.tuning.TuningFeedbackEvaluator
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 class MainActivity : AppCompatActivity() {
-
     private lateinit var noteTextView: TextView
     private lateinit var frequencyTextView: TextView
     private lateinit var accuracyTextView: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var statusTextView: TextView
-    
-    // Tuner dial indicators
+
     private lateinit var leftIndicator: View
     private lateinit var rightIndicator: View
     private lateinit var centerIndicator: View
-    
+
     private var audioRecord: AudioRecord? = null
+
     @Volatile
     private var isListening = false
+
     private var recordingThread: Thread? = null
-    
-    // Frequency smoothing
-    private var lastFrequency = 0f
-    private var frequencyCount = 0
-    private val frequencyHistory = mutableListOf<Float>()
-    
-    private val TAG = "GuitarTuner"
+    private val frequencySmoother = FrequencySmoother()
 
     private data class AudioConfig(
         val sampleRate: Int,
@@ -54,49 +56,22 @@ class MainActivity : AppCompatActivity() {
         val analysisSize: Int,
         val audioSource: Int
     )
-    
-    // Comprehensive musical note frequencies (C0 to C8)
-    private val allNotes = mapOf(
-        // C octaves
-        "C0" to 16.35f, "C1" to 32.70f, "C2" to 65.41f, "C3" to 130.81f, "C4" to 261.63f, "C5" to 523.25f, "C6" to 1046.50f, "C7" to 2093.00f, "C8" to 4186.01f,
-        // C#/Db octaves
-        "C#0" to 17.32f, "C#1" to 34.65f, "C#2" to 69.30f, "C#3" to 138.59f, "C#4" to 277.18f, "C#5" to 554.37f, "C#6" to 1108.73f, "C#7" to 2217.46f,
-        "Db0" to 17.32f, "Db1" to 34.65f, "Db2" to 69.30f, "Db3" to 138.59f, "Db4" to 277.18f, "Db5" to 554.37f, "Db6" to 1108.73f, "Db7" to 2217.46f,
-        // D octaves
-        "D0" to 18.35f, "D1" to 36.71f, "D2" to 73.42f, "D3" to 146.83f, "D4" to 293.66f, "D5" to 587.33f, "D6" to 1174.66f, "D7" to 2349.32f,
-        // D#/Eb octaves
-        "D#0" to 19.45f, "D#1" to 38.89f, "D#2" to 77.78f, "D#3" to 155.56f, "D#4" to 311.13f, "D#5" to 622.25f, "D#6" to 1244.51f, "D#7" to 2489.02f,
-        "Eb0" to 19.45f, "Eb1" to 38.89f, "Eb2" to 77.78f, "Eb3" to 155.56f, "Eb4" to 311.13f, "Eb5" to 622.25f, "Eb6" to 1244.51f, "Eb7" to 2489.02f,
-        // E octaves
-        "E0" to 20.60f, "E1" to 41.20f, "E2" to 82.41f, "E3" to 164.81f, "E4" to 329.63f, "E5" to 659.25f, "E6" to 1318.51f, "E7" to 2637.02f,
-        // F octaves
-        "F0" to 21.83f, "F1" to 43.65f, "F2" to 87.31f, "F3" to 174.61f, "F4" to 349.23f, "F5" to 698.46f, "F6" to 1396.91f, "F7" to 2793.83f,
-        // F#/Gb octaves
-        "F#0" to 23.12f, "F#1" to 46.25f, "F#2" to 92.50f, "F#3" to 185.00f, "F#4" to 369.99f, "F#5" to 739.99f, "F#6" to 1479.98f, "F#7" to 2959.96f,
-        "Gb0" to 23.12f, "Gb1" to 46.25f, "Gb2" to 92.50f, "Gb3" to 185.00f, "Gb4" to 369.99f, "Gb5" to 739.99f, "Gb6" to 1479.98f, "Gb7" to 2959.96f,
-        // G octaves
-        "G0" to 24.50f, "G1" to 49.00f, "G2" to 98.00f, "G3" to 196.00f, "G4" to 392.00f, "G5" to 783.99f, "G6" to 1567.98f, "G7" to 3135.96f,
-        // G#/Ab octaves
-        "G#0" to 25.96f, "G#1" to 51.91f, "G#2" to 103.83f, "G#3" to 207.65f, "G#4" to 415.30f, "G#5" to 830.61f, "G#6" to 1661.22f, "G#7" to 3322.44f,
-        "Ab0" to 25.96f, "Ab1" to 51.91f, "Ab2" to 103.83f, "Ab3" to 207.65f, "Ab4" to 415.30f, "Ab5" to 830.61f, "Ab6" to 1661.22f, "Ab7" to 3322.44f,
-        // A octaves
-        "A0" to 27.50f, "A1" to 55.00f, "A2" to 110.00f, "A3" to 220.00f, "A4" to 440.00f, "A5" to 880.00f, "A6" to 1760.00f, "A7" to 3520.00f,
-        // A#/Bb octaves
-        "A#0" to 29.14f, "A#1" to 58.27f, "A#2" to 116.54f, "A#3" to 233.08f, "A#4" to 466.16f, "A#5" to 932.33f, "A#6" to 1864.66f, "A#7" to 3729.31f,
-        "Bb0" to 29.14f, "Bb1" to 58.27f, "Bb2" to 116.54f, "Bb3" to 233.08f, "Bb4" to 466.16f, "Bb5" to 932.33f, "Bb6" to 1864.66f, "Bb7" to 3729.31f,
-        // B octaves
-        "B0" to 30.87f, "B1" to 61.74f, "B2" to 123.47f, "B3" to 246.94f, "B4" to 493.88f, "B5" to 987.77f, "B6" to 1975.53f, "B7" to 3951.07f
+
+    private data class FeedbackStyle(
+        val labelRes: Int,
+        @ColorInt val accuracyColor: Int,
+        @ColorInt val noteColor: Int
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        
+
         initializeViews()
         setupButtonListeners()
-        requestAudioPermission()
+        renderIdleState()
     }
-    
+
     private fun initializeViews() {
         noteTextView = findViewById(R.id.noteTextView)
         frequencyTextView = findViewById(R.id.frequencyTextView)
@@ -104,13 +79,11 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         statusTextView = findViewById(R.id.statusTextView)
-        
-        // Initialize tuner dial indicators
         leftIndicator = findViewById(R.id.leftIndicator)
         rightIndicator = findViewById(R.id.rightIndicator)
         centerIndicator = findViewById(R.id.centerIndicator)
     }
-    
+
     private fun setupButtonListeners() {
         startButton.setOnClickListener {
             if (checkAudioPermission()) {
@@ -119,68 +92,66 @@ class MainActivity : AppCompatActivity() {
                 requestAudioPermission()
             }
         }
-        
+
         stopButton.setOnClickListener {
             stopTuning()
         }
-        
-        // Add test button for debugging
-        findViewById<Button>(R.id.testButton)?.setOnClickListener {
-            testAudioInput()
-        }
     }
-    
-    private fun requestAudioPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 100)
-        }
-    }
-    
-    private fun checkAudioPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-    }
-    
-    private fun startTuning() {
-        if (isListening) return
 
-        clearFrequencyHistory()
-        isListening = true
-        runOnUiThread {
-            if (isListening) {
-                updateButtonStates()
-                statusTextView.text = "Listening for any musical note..."
-            }
+    private fun requestAudioPermission() {
+        if (!checkAudioPermission()) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                AUDIO_PERMISSION_REQUEST_CODE
+            )
         }
+    }
+
+    private fun checkAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun startTuning() {
+        if (isListening) {
+            return
+        }
+
+        if (!checkAudioPermission()) {
+            requestAudioPermission()
+            return
+        }
+
+        frequencySmoother.clear()
+        isListening = true
+        updateButtonStates()
+        statusTextView.text = getString(R.string.status_listening)
 
         try {
             val recordResult = createAudioRecord()
             if (recordResult == null) {
                 Log.d(TAG, "AudioRecord not initialized, using demo mode")
-                if (isListening) {
-                    startDemoMode()
-                }
+                startDemoMode()
                 return
             }
+
             val (record, config) = recordResult
             audioRecord = record
+            Log.d(
+                TAG,
+                "AudioRecord initialized: rate=${config.sampleRate}, " +
+                    "buffer=${config.bufferSizeInBytes} bytes, " +
+                    "analysis=${config.analysisSize} samples, " +
+                    "source=${config.audioSource}"
+            )
 
-            Log.d(TAG, "AudioRecord initialized: rate=${config.sampleRate}, buffer=${config.bufferSizeInBytes} bytes, analysis=${config.analysisSize} samples, source=${config.audioSource}")
             record.startRecording()
             if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
                 Log.d(TAG, "AudioRecord failed to start recording, using demo mode")
                 record.release()
                 audioRecord = null
-                if (isListening) {
-                    startDemoMode()
-                }
-                return
-            }
-
-            if (!isListening) {
-                record.stop()
-                record.release()
-                audioRecord = null
+                startDemoMode()
                 return
             }
 
@@ -189,34 +160,34 @@ class MainActivity : AppCompatActivity() {
                 val buffer = ShortArray(config.analysisSize)
                 var consecutiveNoSignal = 0
                 var consecutiveReadErrors = 0
-                
+
                 while (isListening) {
                     val readSize = record.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                     if (readSize > 0) {
                         consecutiveReadErrors = 0
-                        // Detect pitch and update UI
-                        val frequency = detectPitch(buffer, readSize, config.sampleRate)
-                        if (frequency > 0) {
+                        val detectedFrequency = PitchDetector.detectPitch(buffer, readSize, config.sampleRate)
+
+                        if (detectedFrequency > 0f) {
                             consecutiveNoSignal = 0
-                            // Smooth frequency detection
-                            val smoothedFrequency = smoothFrequency(frequency)
-                            val (note, targetFreq) = noteInfo(smoothedFrequency)
-                            val centsOff = calculateCentsOff(smoothedFrequency, targetFreq)
-                            
+                            val smoothedFrequency = frequencySmoother.add(detectedFrequency)
+                            val noteMatch = NoteMapper.findClosestNote(smoothedFrequency)
+                            val centsOff = NoteMapper.calculateCentsOff(
+                                smoothedFrequency,
+                                noteMatch.targetFrequency
+                            )
+
                             runOnUiThread {
-                                updateUI(smoothedFrequency, note, centsOff, targetFreq)
-                                statusTextView.text = "Detecting: ${smoothedFrequency.roundToInt()} Hz"
+                                renderTuning(smoothedFrequency, noteMatch, centsOff)
+                                statusTextView.text = getString(
+                                    R.string.status_detecting,
+                                    smoothedFrequency.roundToInt()
+                                )
                             }
                         } else {
                             consecutiveNoSignal++
-                            // Show "No signal" when no frequency detected
-                            runOnUiThread {
-                                if (consecutiveNoSignal > 5) {
-                                    clearFrequencyHistory()
-                                    noteTextView.text = "Universal Tuner"
-                                    frequencyTextView.text = "No signal"
-                                    accuracyTextView.text = ""
-                                    statusTextView.text = "Listening for any musical note..."
+                            if (consecutiveNoSignal > 5) {
+                                runOnUiThread {
+                                    renderNoSignalState()
                                 }
                             }
                         }
@@ -225,219 +196,79 @@ class MainActivity : AppCompatActivity() {
                         Log.d(TAG, "No audio data read: $readSize")
                         if (consecutiveReadErrors >= 3) {
                             runOnUiThread {
-                                statusTextView.text = "Audio input error. Check microphone permission."
+                                statusTextView.text = getString(R.string.status_audio_error)
                             }
                         }
                     }
                 }
             }
             recordingThread?.start()
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting tuning", e)
-            // Fall back to demo mode if audio fails
+        } catch (error: Exception) {
+            Log.e(TAG, "Error starting tuning", error)
             if (isListening) {
                 startDemoMode()
             }
         }
     }
-    
+
     private fun startDemoMode() {
+        frequencySmoother.clear()
         isListening = true
-        runOnUiThread {
-            updateButtonStates()
-            statusTextView.text = "Demo mode - simulating musical notes..."
-        }
-        
+        updateButtonStates()
+        statusTextView.text = getString(R.string.status_demo)
+
         recordingThread = Thread {
-            val demoFrequencies = listOf(261.63f, 329.63f, 440.00f, 523.25f, 659.25f, 880.00f) // C4, E4, A4, C5, E5, A5
+            val demoFrequencies = listOf(82.41f, 110.00f, 146.83f, 196.00f, 246.94f, 329.63f)
             var index = 0
-            
+
             while (isListening) {
                 val frequency = demoFrequencies[index % demoFrequencies.size]
-                val (note, targetFreq) = noteInfo(frequency)
-                val centsOff = calculateCentsOff(frequency, targetFreq)
-                
+                val noteMatch = NoteMapper.findClosestNote(frequency)
+                val centsOff = NoteMapper.calculateCentsOff(frequency, noteMatch.targetFrequency)
+
                 runOnUiThread {
-                    updateUI(frequency, note, centsOff, targetFreq)
+                    renderTuning(frequency, noteMatch, centsOff)
+                    statusTextView.text = getString(R.string.status_demo)
                 }
-                
-                Thread.sleep(2000) // Change note every 2 seconds
+
+                try {
+                    Thread.sleep(DEMO_MODE_INTERVAL_MS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+
                 index++
             }
         }
         recordingThread?.start()
     }
-    
-    private fun detectPitch(buffer: ShortArray, size: Int, sampleRate: Int): Float {
-        val actualSize = size.coerceAtMost(buffer.size)
-        if (actualSize < 1024) return 0f
 
-        // Convert to floats and remove DC offset
-        val floatBuf = FloatArray(actualSize)
-        var mean = 0f
-        for (i in 0 until actualSize) {
-            mean += buffer[i]
-        }
-        mean /= actualSize
-
-        var rms = 0f
-        for (i in 0 until actualSize) {
-            val v = buffer[i] - mean
-            floatBuf[i] = v
-            rms += v * v
-        }
-        rms = sqrt(rms / actualSize)
-
-        // Reject very quiet input
-        if (rms < 30f) return 0f
-
-        // YIN pitch detection: more stable than zero-crossing/naive autocorrelation
-        val tauMax = actualSize / 2
-        val difference = FloatArray(tauMax)
-        for (tau in 1 until tauMax) {
-            var sum = 0f
-            var i = 0
-            val limit = actualSize - tau
-            while (i < limit) {
-                val diff = floatBuf[i] - floatBuf[i + tau]
-                sum += diff * diff
-                i++
-            }
-            difference[tau] = sum
-        }
-
-        val cmnd = FloatArray(tauMax)
-        var runningSum = 0f
-        cmnd[0] = 1f
-        for (tau in 1 until tauMax) {
-            runningSum += difference[tau]
-            if (runningSum == 0f) {
-                cmnd[tau] = 1f
-            } else {
-                cmnd[tau] = difference[tau] * tau / runningSum
-            }
-        }
-
-        // Find first minimum under threshold
-        val threshold = 0.12f
-        var tauEstimate = -1
-        var minVal = Float.MAX_VALUE
-        var minTau = -1
-        for (tau in 2 until tauMax) {
-            if (cmnd[tau] < threshold && cmnd[tau] < cmnd[tau - 1]) {
-                tauEstimate = tau
-                break
-            }
-            if (cmnd[tau] < minVal) {
-                minVal = cmnd[tau]
-                minTau = tau
-            }
-        }
-        if (tauEstimate == -1) {
-            if (minTau > 0 && minVal < 0.25f) {
-                tauEstimate = minTau
-            }
-        }
-
-        if (tauEstimate <= 0) return 0f
-
-        // Parabolic interpolation for finer estimate
-        val prev = if (tauEstimate > 1) cmnd[tauEstimate - 1] else cmnd[tauEstimate]
-        val next = if (tauEstimate + 1 < tauMax) cmnd[tauEstimate + 1] else cmnd[tauEstimate]
-        val denom = 2 * (2 * cmnd[tauEstimate] - prev - next)
-        val betterTau = if (denom != 0f) {
-            tauEstimate + (next - prev) / denom
-        } else tauEstimate.toFloat()
-
-        val freq = sampleRate / betterTau
-        return if (freq in 15f..4000f) freq else 0f
-    }
-    
-    private fun detectSimpleFrequency(buffer: ShortArray, sampleRate: Int): Float {
-        // Simple peak detection method
-        var peakCount = 0
-        var lastPeak = 0
-        val peaks = mutableListOf<Int>()
-        
-        // Find peaks in the signal
-        for (i in 1 until buffer.size - 1) {
-            if (buffer[i] > buffer[i - 1] && buffer[i] > buffer[i + 1] && buffer[i] > 1000) {
-                peaks.add(i)
-                if (peaks.size > 1) {
-                    val period = i - lastPeak
-                    if (period > 10 && period < 1000) { // Reasonable period range
-                        peakCount++
-                    }
-                }
-                lastPeak = i
-            }
-        }
-        
-        if (peakCount > 2 && peaks.size > 3) {
-            // Calculate average period
-            var totalPeriod = 0
-            for (i in 1 until peaks.size) {
-                totalPeriod += peaks[i] - peaks[i - 1]
-            }
-            val avgPeriod = totalPeriod.toFloat() / (peaks.size - 1)
-            
-            if (avgPeriod > 0) {
-                val frequency = sampleRate / avgPeriod
-                if (frequency in 15.0..4000.0) { // Expanded range for all musical notes
-                    return frequency
-                }
-            }
-        }
-        
-        return 0f
-    }
-    
-    private fun smoothFrequency(frequency: Float): Float {
-        // Add to history
-        frequencyHistory.add(frequency)
-        
-        // Keep only last 5 readings
-        if (frequencyHistory.size > 5) {
-            frequencyHistory.removeAt(0)
-        }
-        
-        // Calculate median frequency (more stable than average)
-        val sortedFrequencies = frequencyHistory.sorted()
-        val medianIndex = sortedFrequencies.size / 2
-        
-        return if (sortedFrequencies.size % 2 == 0) {
-            (sortedFrequencies[medianIndex - 1] + sortedFrequencies[medianIndex]) / 2
-        } else {
-            sortedFrequencies[medianIndex]
-        }
-    }
-
-    private fun clearFrequencyHistory() {
-        frequencyHistory.clear()
-    }
-    
     private fun stopTuning() {
+        isListening = false
+        recordingThread?.interrupt()
+        recordingThread = null
+
+        audioRecord?.let { releaseAudioRecord(it) }
+        audioRecord = null
+
+        frequencySmoother.clear()
+        updateButtonStates()
+        renderStoppedState()
+    }
+
+    private fun releaseAudioRecord(record: AudioRecord) {
         try {
-            isListening = false
-            recordingThread?.interrupt()
-            recordingThread = null
-            audioRecord?.stop()
-            audioRecord?.release()
-            audioRecord = null
-            clearFrequencyHistory()
-            updateButtonStates()
-            
-            noteTextView.text = "Guitar Tuner"
-            frequencyTextView.text = "0.0 Hz"
-            accuracyTextView.text = ""
-            statusTextView.text = "Tuning stopped"
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping tuning", e)
+            if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                record.stop()
+            }
+        } catch (error: IllegalStateException) {
+            Log.d(TAG, "AudioRecord was not in a stoppable state", error)
+        } finally {
+            record.release()
         }
     }
-    
+
     private fun updateButtonStates() {
         if (isListening) {
             startButton.visibility = View.GONE
@@ -447,159 +278,118 @@ class MainActivity : AppCompatActivity() {
             stopButton.visibility = View.GONE
         }
     }
-    
-    private fun updateUI(frequency: Float, note: String, centsOff: Double, targetFreq: Float) {
-        noteTextView.text = note
-        frequencyTextView.text = "%.1f Hz".format(frequency)
 
-        // Update tuner dial
-        updateTunerDial(centsOff)
+    private fun renderIdleState() {
+        noteTextView.text = getString(R.string.app_name)
+        noteTextView.setTextColor(getColorCompat(R.color.text_primary))
+        frequencyTextView.text = getString(R.string.frequency_placeholder)
+        accuracyTextView.text = ""
+        statusTextView.text = getString(R.string.status_idle)
+        hideDialIndicators()
+    }
 
-        val centsAbs = abs(centsOff)
-        when {
-            centsAbs <= 5 -> {
-                accuracyTextView.text = "✓ Perfect!"
-                accuracyTextView.setTextColor(0xFF00FF00.toInt()) // Green
-                noteTextView.setTextColor(0xFF00FF00.toInt())
+    private fun renderStoppedState() {
+        renderIdleState()
+        statusTextView.text = getString(R.string.status_stopped)
+    }
+
+    private fun renderNoSignalState() {
+        frequencySmoother.clear()
+        noteTextView.text = getString(R.string.app_name)
+        noteTextView.setTextColor(getColorCompat(R.color.text_primary))
+        frequencyTextView.text = getString(R.string.no_signal)
+        accuracyTextView.text = ""
+        statusTextView.text = getString(R.string.status_listening)
+        hideDialIndicators()
+    }
+
+    private fun renderTuning(frequency: Float, noteMatch: NoteMatch, centsOff: Double) {
+        val feedback = TuningFeedbackEvaluator.fromCents(centsOff)
+        val style = feedbackStyle(feedback.accuracyBand)
+
+        noteTextView.text = noteMatch.name
+        noteTextView.setTextColor(style.noteColor)
+        accuracyTextView.text = getString(style.labelRes)
+        accuracyTextView.setTextColor(style.accuracyColor)
+        frequencyTextView.text = getString(
+            R.string.frequency_readout,
+            frequency,
+            centsOff,
+            noteMatch.targetFrequency
+        )
+
+        updateTunerDial(feedback)
+    }
+
+    private fun feedbackStyle(accuracyBand: AccuracyBand): FeedbackStyle {
+        return when (accuracyBand) {
+            AccuracyBand.PERFECT -> FeedbackStyle(
+                labelRes = R.string.accuracy_perfect,
+                accuracyColor = getColorCompat(R.color.tuner_green),
+                noteColor = getColorCompat(R.color.tuner_green)
+            )
+            AccuracyBand.VERY_GOOD -> FeedbackStyle(
+                labelRes = R.string.accuracy_very_good,
+                accuracyColor = getColorCompat(R.color.tuner_green),
+                noteColor = getColorCompat(R.color.text_primary)
+            )
+            AccuracyBand.GOOD -> FeedbackStyle(
+                labelRes = R.string.accuracy_good,
+                accuracyColor = getColorCompat(R.color.tuner_yellow),
+                noteColor = getColorCompat(R.color.text_primary)
+            )
+            AccuracyBand.ADJUST -> FeedbackStyle(
+                labelRes = R.string.accuracy_adjust,
+                accuracyColor = getColorCompat(R.color.tuner_orange),
+                noteColor = getColorCompat(R.color.tuner_orange)
+            )
+            AccuracyBand.WAY_OFF -> FeedbackStyle(
+                labelRes = R.string.accuracy_way_off,
+                accuracyColor = getColorCompat(R.color.tuner_red),
+                noteColor = getColorCompat(R.color.tuner_red)
+            )
+        }
+    }
+
+    private fun updateTunerDial(feedback: TuningFeedback) {
+        hideDialIndicators()
+
+        when (feedback.dialIndicator) {
+            DialIndicator.LEFT_WARNING -> {
+                leftIndicator.visibility = View.VISIBLE
+                leftIndicator.setBackgroundColor(getColorCompat(R.color.tuner_red))
             }
-            centsAbs <= 10 -> {
-                accuracyTextView.text = "✓ Very Good"
-                accuracyTextView.setTextColor(0xFF00FF00.toInt())
-                noteTextView.setTextColor(0xFFFFFFFF.toInt())
+            DialIndicator.LEFT_CAUTION -> {
+                leftIndicator.visibility = View.VISIBLE
+                leftIndicator.setBackgroundColor(getColorCompat(R.color.tuner_yellow))
             }
-            centsAbs <= 20 -> {
-                accuracyTextView.text = "✓ Good"
-                accuracyTextView.setTextColor(0xFFFFFF00.toInt())
-                noteTextView.setTextColor(0xFFFFFFFF.toInt())
+            DialIndicator.CENTER_IN_TUNE -> {
+                centerIndicator.visibility = View.VISIBLE
+                centerIndicator.setBackgroundColor(getColorCompat(R.color.tuner_green))
             }
-            centsAbs <= 35 -> {
-                accuracyTextView.text = "→ Adjust"
-                accuracyTextView.setTextColor(0xFFFFA500.toInt())
-                noteTextView.setTextColor(0xFFFFA500.toInt())
+            DialIndicator.RIGHT_CAUTION -> {
+                rightIndicator.visibility = View.VISIBLE
+                rightIndicator.setBackgroundColor(getColorCompat(R.color.tuner_yellow))
             }
-            else -> {
-                accuracyTextView.text = "→ Way off"
-                accuracyTextView.setTextColor(0xFFFF0000.toInt())
-                noteTextView.setTextColor(0xFFFF0000.toInt())
+            DialIndicator.RIGHT_WARNING -> {
+                rightIndicator.visibility = View.VISIBLE
+                rightIndicator.setBackgroundColor(getColorCompat(R.color.tuner_red))
             }
         }
-
-        // Show cents deviation for precise feedback
-        frequencyTextView.text = "%.1f Hz (%.0f cents, target %.1f Hz)".format(frequency, centsOff, targetFreq)
     }
-    
-    private fun updateTunerDial(cents: Double) {
-        // Hide all indicators first
+
+    private fun hideDialIndicators() {
         leftIndicator.visibility = View.GONE
         rightIndicator.visibility = View.GONE
         centerIndicator.visibility = View.GONE
-        
-        when {
-            cents < -20 -> {
-                // Flat - show left indicator
-                leftIndicator.visibility = View.VISIBLE
-                leftIndicator.setBackgroundColor(0xFFFF0000.toInt()) // Red
-            }
-            cents > 20 -> {
-                // Sharp - show right indicator
-                rightIndicator.visibility = View.VISIBLE
-                rightIndicator.setBackgroundColor(0xFFFF0000.toInt()) // Red
-            }
-            abs(cents) <= 5 -> {
-                // Perfect - show center indicator
-                centerIndicator.visibility = View.VISIBLE
-                centerIndicator.setBackgroundColor(0xFF00FF00.toInt()) // Green
-            }
-            cents < 0 -> {
-                // Slightly flat - show left indicator
-                leftIndicator.visibility = View.VISIBLE
-                leftIndicator.setBackgroundColor(0xFFFFFF00.toInt()) // Yellow
-            }
-            else -> {
-                // Slightly sharp - show right indicator
-                rightIndicator.visibility = View.VISIBLE
-                rightIndicator.setBackgroundColor(0xFFFFFF00.toInt()) // Yellow
-            }
-        }
-    }
-    
-    private fun noteInfo(freq: Float): Pair<String, Float> {
-        if (freq <= 0f) return "--" to 0f
-        val A4 = 440.0
-        val noteNames = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-        val noteNumber = (12 * (ln(freq / A4) / ln(2.0))).roundToInt() + 69
-        val safeIndex = ((noteNumber % 12) + 12) % 12
-        val noteName = noteNames[safeIndex]
-        val octave = noteNumber / 12 - 1
-        val targetFreq = 440f * kotlin.math.exp(kotlin.math.ln(2f) * (noteNumber - 69) / 12f)
-        return "$noteName$octave" to targetFreq
     }
 
-    private fun calculateCentsOff(frequency: Float, targetFreq: Float): Double {
-        if (frequency <= 0 || targetFreq <= 0) return 0.0
-        return 1200 * ln(frequency / targetFreq) / ln(2.0)
-    }
-    
-    private fun testAudioInput() {
-        statusTextView.text = "Testing audio input..."
-        
-        Thread {
-            try {
-                val recordResult = createAudioRecord()
-                if (recordResult == null) {
-                    runOnUiThread {
-                        statusTextView.text = "AudioRecord failed to initialize"
-                    }
-                    return@Thread
-                }
-                val (testAudioRecord, config) = recordResult
-                
-                if (testAudioRecord.state == AudioRecord.STATE_INITIALIZED) {
-                    testAudioRecord.startRecording()
-                    val buffer = ShortArray(config.analysisSize)
-                    
-                    for (i in 1..10) {
-                        val readSize = testAudioRecord.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
-                        if (readSize > 0) {
-                            var rms = 0.0
-                            for (j in 0 until readSize) {
-                                rms += buffer[j] * buffer[j]
-                            }
-                            rms = Math.sqrt(rms / readSize)
-                            
-                            // Try to detect frequency
-                            val frequency = detectPitch(buffer, readSize, config.sampleRate)
-                            
-                            runOnUiThread {
-                                if (frequency > 0) {
-                                    statusTextView.text = "Test $i: RMS = ${rms.roundToInt()}, Freq = ${frequency.roundToInt()} Hz"
-                                } else {
-                                    statusTextView.text = "Test $i: RMS = ${rms.roundToInt()}, No freq detected"
-                                }
-                            }
-                        }
-                        Thread.sleep(500)
-                    }
-                    
-                    testAudioRecord.stop()
-                    testAudioRecord.release()
-                    
-                    runOnUiThread {
-                        statusTextView.text = "Audio test complete"
-                    }
-                } else {
-                    runOnUiThread {
-                        statusTextView.text = "AudioRecord failed to initialize"
-                    }
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    statusTextView.text = "Audio test error: ${e.message}"
-                }
-            }
-        }.start()
+    @ColorInt
+    private fun getColorCompat(@ColorRes colorRes: Int): Int {
+        return ContextCompat.getColor(this, colorRes)
     }
 
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private fun createAudioRecord(): Pair<AudioRecord, AudioConfig>? {
         val sampleRates = intArrayOf(48000, 44100, 32000, 22050, 16000)
         val sources = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -615,7 +405,9 @@ class MainActivity : AppCompatActivity() {
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT
                 )
-                if (minBuffer <= 0) continue
+                if (minBuffer <= 0) {
+                    continue
+                }
 
                 val analysisSize = if (rate >= 44100) 4096 else 2048
                 val bufferSizeInBytes = max(minBuffer, analysisSize * 2)
@@ -628,29 +420,48 @@ class MainActivity : AppCompatActivity() {
                     bufferSizeInBytes
                 )
                 if (record.state == AudioRecord.STATE_INITIALIZED) {
-                    return record to AudioConfig(rate, bufferSizeInBytes, analysisSize, source)
+                    return record to AudioConfig(
+                        sampleRate = rate,
+                        bufferSizeInBytes = bufferSizeInBytes,
+                        analysisSize = analysisSize,
+                        audioSource = source
+                    )
                 }
+
                 record.release()
             }
         }
+
         return null
     }
-    
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Microphone permission granted!", Toast.LENGTH_SHORT).show()
+        if (requestCode == AUDIO_PERMISSION_REQUEST_CODE &&
+            grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(this, getString(R.string.permission_granted), Toast.LENGTH_SHORT).show()
+            startTuning()
         } else {
-            Toast.makeText(this, "Microphone permission is required for tuning", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.permission_required), Toast.LENGTH_LONG).show()
         }
     }
-    
+
     override fun onDestroy() {
+        if (isListening) {
+            stopTuning()
+        }
         super.onDestroy()
-        stopTuning()
+    }
+
+    private companion object {
+        const val AUDIO_PERMISSION_REQUEST_CODE = 100
+        const val DEMO_MODE_INTERVAL_MS = 1500L
+        const val TAG = "GuitarTuner"
     }
 }

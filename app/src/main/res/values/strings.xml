@@ -1,3 +1,21 @@
 <resources>
-    <string name="app_name">GuitarTuner</string>
+    <string name="app_name">Guitar Tuner</string>
+    <string name="frequency_placeholder">0.0 Hz</string>
+    <string name="no_signal">No signal</string>
+    <string name="button_start">Start Tuning</string>
+    <string name="button_stop">Stop Tuning</string>
+    <string name="status_idle">Tap Start to begin tuning any instrument</string>
+    <string name="status_listening">Listening for any musical note...</string>
+    <string name="status_detecting">Detecting: %1$d Hz</string>
+    <string name="status_demo">Demo mode active</string>
+    <string name="status_stopped">Tuning stopped</string>
+    <string name="status_audio_error">Audio input error. Check microphone permission.</string>
+    <string name="permission_granted">Microphone permission granted.</string>
+    <string name="permission_required">Microphone permission is required for tuning.</string>
+    <string name="frequency_readout">%1$.1f Hz (%2$.0f cents, target %3$.1f Hz)</string>
+    <string name="accuracy_perfect">Perfect</string>
+    <string name="accuracy_very_good">Very Good</string>
+    <string name="accuracy_good">Good</string>
+    <string name="accuracy_adjust">Adjust</string>
+    <string name="accuracy_way_off">Way off</string>
 </resources>

@@ -1,6 +1,6 @@
 # Privacy Policy for Guitar Tuner
 
-**Last updated:** August 2, 2024
+**Last updated:** March 31, 2026
 
 ## Overview
 Guitar Tuner is a simple audio tuning application that helps musicians tune their guitars and other stringed instruments.
@@ -31,7 +31,7 @@ This app does not knowingly collect personal information from children under 13.
 We may update this privacy policy from time to time. We will notify users of any material changes.
 
 ## Contact Us
-If you have questions about this privacy policy, please contact us through the app store listing.
+If you have questions about this privacy policy, please contact us through the app store listing or the repository contact details.
 
 ## Your Rights
 You have the right to:
@@ -39,4 +39,4 @@ You have the right to:
 - Uninstall the app at any time
 - Request information about what data we collect (none)
 
-This app is designed with privacy in mind - we believe in minimal data collection and maximum user control. 
+This app is designed with privacy in mind - we believe in minimal data collection and maximum user control.

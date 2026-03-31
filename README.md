@@ -1,28 +1,75 @@
-# Guitar Tuner Privacy Policy
+# Guitar Tuner
 
-This repository hosts the privacy policy for the Guitar Tuner Android app.
+![Guitar Tuner feature graphic](docs/assets/feature-graphic.png)
 
-## Privacy Policy
+Android guitar tuner with on-device pitch detection, cents-based tuning feedback, and a deliberately testable core. The original goal of the project was straightforward: build a tuner that is actually pleasant to use, with no ads and no nags to unlock basic functionality behind paywalls. The repository is structured to be readable as a portfolio project: the signal-processing logic lives in pure Kotlin classes, the Android shell is thin, and the project is set up for CI-backed verification.
 
-The privacy policy is available at: https://[your-username].github.io/guitar-tuner-privacy/
+## Highlights
 
-## About Guitar Tuner
+- Real-time pitch detection using a YIN-style estimator over PCM microphone input
+- Chromatic note mapping with cents deviation and tuner-dial feedback
+- Median smoothing to stabilize noisy real-world readings
+- Demo fallback for environments where microphone capture is unavailable
+- No ads, no in-app upsell flow, and no locked "premium" tuning features
+- Local-only processing with no network permission and no analytics
 
-cid:24E2CFDD-F067-4E64-B8DD-CB29663B8E23<img width="1080" height="2340" alt="image" src="https://github.com/user-attachments/assets/8f0d8216-fdbc-481c-b19e-d8b11a46c6b0" />
+## Architecture
 
+- `MainActivity` owns Android lifecycle, permission handling, and view binding
+- `PitchDetector` implements the YIN-style pitch estimator over raw `ShortArray` PCM frames
+- `FrequencySmoother` keeps a rolling median window for more stable note presentation
+- `NoteMapper` converts detected frequencies into note names and target frequencies
+- `TuningFeedbackEvaluator` maps cents deviation into user-facing tuning states
 
-Guitar Tuner is a professional-grade tuning application for musicians. The app features:
+More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- Real-time pitch detection
-- Visual tuner dial with accuracy indicators
-- Support for all 6 guitar strings
-- Privacy-focused design (no data collection)
-- Works offline
+## Testing
 
-## Contact
+The test strategy focuses on deterministic coverage of the logic that matters most:
 
-For privacy-related questions, please contact us through the app store listing.
+- note mapping and cents calculations
+- smoothing window behavior
+- threshold-based tuning feedback
+- synthetic PCM regression tests for multiple reference pitches and sample rates
 
----
+Current unit tests live under [`app/src/test/java/com/whawe/guitartuner/tuning`](app/src/test/java/com/whawe/guitartuner/tuning). The remaining release work is tracked in [docs/PUBLIC_RELEASE_CHECKLIST.md](docs/PUBLIC_RELEASE_CHECKLIST.md).
 
-**Note**: Replace `[your-username]` with your actual GitHub username when you create the repository. 
+Connected Android tests now live under [`app/src/androidTest/java/com/whawe/guitartuner`](app/src/androidTest/java/com/whawe/guitartuner). They cover the initial render, microphone-permission grant and denial flows, and the resulting start/stop control transitions on an emulator.
+
+## Local Development
+
+Validated build runtime: JDK 17.
+
+The project currently targets a JDK 17 Gradle runtime. A `.java-version` file is included so local tooling can pin the same version used in CI.
+
+```bash
+./gradlew testDebugUnitTest
+./gradlew lintDebug
+./gradlew assembleDebug
+./gradlew connectedDebugAndroidTest
+```
+
+To install on a connected device or emulator:
+
+```bash
+./gradlew installDebug
+adb shell am start -n com.whawe.guitartuner/.MainActivity
+```
+
+## Build and Release Notes
+
+- Release signing is environment-driven through `GT_SIGN_STORE`, `GT_SIGN_STORE_PASS`, `GT_KEY_ALIAS`, and `GT_KEY_PASS`
+- CI is defined in [`.github/workflows/android.yml`](.github/workflows/android.yml)
+- Play Store preparation notes live in [docs/PLAY_STORE_RELEASE.md](docs/PLAY_STORE_RELEASE.md)
+- Design-source artwork lives under [`docs/assets/design-source`](docs/assets/design-source)
+
+## Privacy
+
+The app requests microphone access for local pitch detection only. It does not require internet access and does not collect analytics or personal data.
+
+- Markdown policy: [PRIVACY_POLICY.md](PRIVACY_POLICY.md)
+- Static privacy page source: [index.html](index.html)
+
+## Repository Status
+
+This pass cleaned up local-only artifacts, removed placeholder tests/docs, added a license, introduced CI, extracted the core tuning logic into testable modules, added instrumentation coverage, and moved design-source assets out of the repo root. The remaining work before a polished public launch is documented in [docs/PUBLIC_RELEASE_CHECKLIST.md](docs/PUBLIC_RELEASE_CHECKLIST.md).

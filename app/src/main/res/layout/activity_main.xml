@@ -2,19 +2,19 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/surface_dark"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="24dp"
-    android:background="#1a1a1a">
+    android:padding="24dp">
 
     <TextView
         android:id="@+id/noteTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Universal Tuner"
+        android:text="@string/app_name"
         android:textSize="48sp"
         android:textStyle="bold"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/text_primary"
         android:gravity="center"
         android:layout_marginBottom="16dp" />
 
@@ -22,9 +22,9 @@
         android:id="@+id/frequencyTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="0.0 Hz"
+        android:text="@string/frequency_placeholder"
         android:textSize="20sp"
-        android:textColor="#CCCCCC"
+        android:textColor="@color/text_secondary"
         android:gravity="center"
         android:layout_marginBottom="8dp" />
 
@@ -40,7 +40,7 @@
             android:layout_width="4dp"
             android:layout_height="60dp"
             android:layout_gravity="center"
-            android:background="#FFFFFF" />
+            android:background="@color/text_primary" />
 
         <!-- Left indicator (flat) -->
         <View
@@ -49,7 +49,7 @@
             android:layout_height="40dp"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="60dp"
-            android:background="#FF0000"
+            android:background="@color/tuner_red"
             android:visibility="gone" />
 
         <!-- Right indicator (sharp) -->
@@ -59,7 +59,7 @@
             android:layout_height="40dp"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="240dp"
-            android:background="#FF0000"
+            android:background="@color/tuner_red"
             android:visibility="gone" />
 
         <!-- Centered indicator (in tune) -->
@@ -68,7 +68,7 @@
             android:layout_width="4dp"
             android:layout_height="50dp"
             android:layout_gravity="center"
-            android:background="#00FF00"
+            android:background="@color/tuner_green"
             android:visibility="gone" />
 
         <!-- Flat and Sharp labels -->
@@ -77,7 +77,7 @@
             android:layout_height="wrap_content"
             android:text="♭"
             android:textSize="16sp"
-            android:textColor="#FF0000"
+            android:textColor="@color/tuner_red"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="40dp" />
 
@@ -86,7 +86,7 @@
             android:layout_height="wrap_content"
             android:text="♯"
             android:textSize="16sp"
-            android:textColor="#FF0000"
+            android:textColor="@color/tuner_red"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="260dp" />
 
@@ -98,7 +98,7 @@
         android:layout_height="wrap_content"
         android:text=""
         android:textSize="18sp"
-        android:textColor="#FFD700"
+        android:textColor="@color/tuner_yellow"
         android:gravity="center"
         android:layout_marginBottom="16dp" />
 
@@ -106,38 +106,28 @@
         android:id="@+id/startButton"
         android:layout_width="200dp"
         android:layout_height="60dp"
-        android:text="Start Tuning"
+        android:text="@string/button_start"
         android:textSize="18sp"
         android:background="@drawable/button_background"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/text_primary"
         android:layout_marginBottom="16dp" />
 
     <Button
         android:id="@+id/stopButton"
         android:layout_width="200dp"
         android:layout_height="60dp"
-        android:text="Stop Tuning"
+        android:text="@string/button_stop"
         android:textSize="18sp"
         android:background="@drawable/button_background"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/text_primary"
         android:visibility="gone" />
-
-    <Button
-        android:id="@+id/testButton"
-        android:layout_width="200dp"
-        android:layout_height="50dp"
-        android:text="Test Audio"
-        android:textSize="16sp"
-        android:background="@drawable/button_background"
-        android:textColor="#FFFFFF"
-        android:layout_marginTop="8dp" />
 
     <TextView
         android:id="@+id/statusTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Tap Start to begin tuning any instrument"
+        android:text="@string/status_idle"
         android:textSize="16sp"
-        android:textColor="#888888"
+        android:textColor="@color/text_muted"
         android:layout_marginTop="16dp" />
 </LinearLayout>
