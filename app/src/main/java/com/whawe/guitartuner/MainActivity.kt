@@ -181,7 +181,9 @@ class MainActivity : AppCompatActivity() {
                             }
                         } else {
                             consecutiveNoSignal++
-                            if (consecutiveNoSignal > 5) {
+                            if (consecutiveNoSignal == 6) {
+                                // Fire exactly once per silence event rather than every
+                                // frame, avoiding redundant smoother clears and UI posts.
                                 runOnUiThread {
                                     renderNoSignalState()
                                 }
@@ -383,7 +385,11 @@ class MainActivity : AppCompatActivity() {
         const val AUDIO_PERMISSION_REQUEST_CODE = 100
         const val DEMO_MODE_INTERVAL_MS = 1500L
         const val DIAL_EDGE_PADDING_DP = 42f
-        const val NEEDLE_ANIMATION_DURATION_MS = 60L
+        // Longer than one audio frame (~93 ms at 44100 Hz / 4096 samples) so each new
+        // update arrives while an animation is still in progress. ViewPropertyAnimator
+        // starts from the current position on each call, producing continuous smooth
+        // motion instead of the snap-then-hold pattern caused by a 60 ms duration.
+        const val NEEDLE_ANIMATION_DURATION_MS = 150L
         const val TAG = "GuitarTuner"
     }
 }

@@ -24,7 +24,10 @@ object PitchDetector {
         }
         rms = sqrt(rms / actualSize)
 
-        if (rms < 30f) {
+        // 150/32767 ≈ 0.46% of full scale. Low enough to capture quiet playing while
+        // rejecting ambient noise (conversation, HVAC) that would otherwise cause the
+        // YIN algorithm to try finding a pitch in random noise.
+        if (rms < 150f) {
             return 0f
         }
 
