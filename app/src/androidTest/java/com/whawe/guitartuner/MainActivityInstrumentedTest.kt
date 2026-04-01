@@ -17,8 +17,9 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Test
+import org.junit.Before
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 
@@ -29,18 +30,32 @@ class MainActivityInstrumentedTest {
     private val targetContext = instrumentation.targetContext
     private val device = UiDevice.getInstance(instrumentation)
 
+    // Revoke the permission before every test so each one starts from a known state
+    // and is not affected by what a previous test did.
+    @Before
+    fun revokeAudioPermission() {
+        instrumentation.uiAutomation
+            .executeShellCommand("pm revoke ${targetContext.packageName} ${Manifest.permission.RECORD_AUDIO}")
+            .close()
+    }
+
     @Test
-    fun a_launch_rendersIdleState() {
+    fun a_launch_rendersInitialState() {
+        // Grant permission up front so the system dialog doesn't appear and push the
+        // activity out of RESUMED, which would cause NoActivityResumedException.
+        grantAudioPermission()
+
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withId(R.id.noteTextView)).check(matches(withText(R.string.app_name)))
             onView(withId(R.id.frequencyTextView)).check(matches(withText(R.string.frequency_placeholder)))
-            onView(withId(R.id.statusTextView)).check(matches(withText(R.string.status_idle)))
+            onView(withId(R.id.statusTextView)).check(matches(withText(R.string.status_listening)))
             onView(withId(R.id.scalePracticeButton)).check(matches(isDisplayed()))
         }
     }
 
     @Test
     fun b_denyingMicrophonePermission_keepsAppUsable() {
+        // Permission revoked by @Before — the dialog will appear on launch.
         ActivityScenario.launch(MainActivity::class.java).use {
             val denyButton = waitForPermissionButton(
                 "permission_deny_button",
@@ -61,6 +76,7 @@ class MainActivityInstrumentedTest {
 
     @Test
     fun c_allowingMicrophonePermissionStartsAutomaticTuning() {
+        // Permission revoked by @Before — the dialog will appear on launch.
         ActivityScenario.launch(MainActivity::class.java).use {
             val allowButton = waitForPermissionButton(
                 "permission_allow_foreground_only_button",
@@ -78,11 +94,21 @@ class MainActivityInstrumentedTest {
 
     @Test
     fun d_scalePracticeButton_opensScalePracticePage() {
+        // Grant permission so the activity reaches RESUMED and Espresso can click
+        // the button without the system dialog blocking interaction.
+        grantAudioPermission()
+
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withId(R.id.scalePracticeButton)).perform(click())
             onView(withId(R.id.scaleTitleTextView)).check(matches(withText(R.string.scale_practice_title)))
             onView(withId(R.id.scaleStaveView)).check(matches(isDisplayed()))
         }
+    }
+
+    private fun grantAudioPermission() {
+        instrumentation.uiAutomation
+            .executeShellCommand("pm grant ${targetContext.packageName} ${Manifest.permission.RECORD_AUDIO}")
+            .close()
     }
 
     private fun waitForPermissionButton(vararg buttonIds: String) =
