@@ -1,11 +1,9 @@
 package com.whawe.guitartuner
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaRecorder
-import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.util.Log
@@ -15,10 +13,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
-import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.whawe.guitartuner.audio.AudioRecordFactory
 import com.whawe.guitartuner.tuning.AccuracyBand
 import com.whawe.guitartuner.tuning.FrequencySmoother
 import com.whawe.guitartuner.tuning.NoteMapper
@@ -26,15 +24,13 @@ import com.whawe.guitartuner.tuning.NoteMatch
 import com.whawe.guitartuner.tuning.PitchDetector
 import com.whawe.guitartuner.tuning.TuningFeedback
 import com.whawe.guitartuner.tuning.TuningFeedbackEvaluator
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
     private lateinit var noteTextView: TextView
     private lateinit var frequencyTextView: TextView
     private lateinit var accuracyTextView: TextView
-    private lateinit var startButton: Button
-    private lateinit var stopButton: Button
+    private lateinit var scalePracticeButton: Button
     private lateinit var statusTextView: TextView
 
     private lateinit var tunerDial: View
@@ -48,13 +44,6 @@ class MainActivity : AppCompatActivity() {
     private var recordingThread: Thread? = null
     private val frequencySmoother = FrequencySmoother()
 
-    private data class AudioConfig(
-        val sampleRate: Int,
-        val bufferSizeInBytes: Int,
-        val analysisSize: Int,
-        val audioSource: Int
-    )
-
     private data class FeedbackStyle(
         val labelRes: Int,
         @ColorInt val accuracyColor: Int,
@@ -66,32 +55,35 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         initializeViews()
-        setupButtonListeners()
+        setupNavigation()
         renderIdleState()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        beginTuningIfPossible()
+    }
+
+    override fun onStop() {
+        if (isListening) {
+            stopTuning()
+        }
+        super.onStop()
     }
 
     private fun initializeViews() {
         noteTextView = findViewById(R.id.noteTextView)
         frequencyTextView = findViewById(R.id.frequencyTextView)
         accuracyTextView = findViewById(R.id.accuracyTextView)
-        startButton = findViewById(R.id.startButton)
-        stopButton = findViewById(R.id.stopButton)
+        scalePracticeButton = findViewById(R.id.scalePracticeButton)
         statusTextView = findViewById(R.id.statusTextView)
         tunerDial = findViewById(R.id.tunerDial)
         needleIndicator = findViewById(R.id.needleIndicator)
     }
 
-    private fun setupButtonListeners() {
-        startButton.setOnClickListener {
-            if (checkAudioPermission()) {
-                startTuning()
-            } else {
-                requestAudioPermission()
-            }
-        }
-
-        stopButton.setOnClickListener {
-            stopTuning()
+    private fun setupNavigation() {
+        scalePracticeButton.setOnClickListener {
+            startActivity(Intent(this, ScalePracticeActivity::class.java))
         }
     }
 
@@ -110,6 +102,14 @@ class MainActivity : AppCompatActivity() {
             PackageManager.PERMISSION_GRANTED
     }
 
+    private fun beginTuningIfPossible() {
+        if (checkAudioPermission()) {
+            startTuning()
+        } else {
+            requestAudioPermission()
+        }
+    }
+
     private fun startTuning() {
         if (isListening) {
             return
@@ -122,11 +122,10 @@ class MainActivity : AppCompatActivity() {
 
         frequencySmoother.clear()
         isListening = true
-        updateButtonStates()
         statusTextView.text = getString(R.string.status_listening)
 
         try {
-            val recordResult = createAudioRecord()
+            val recordResult = AudioRecordFactory.create()
             if (recordResult == null) {
                 Log.d(TAG, "AudioRecord not initialized, using demo mode")
                 startDemoMode()
@@ -146,7 +145,7 @@ class MainActivity : AppCompatActivity() {
             record.startRecording()
             if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
                 Log.d(TAG, "AudioRecord failed to start recording, using demo mode")
-                record.release()
+                AudioRecordFactory.release(record)
                 audioRecord = null
                 startDemoMode()
                 return
@@ -211,7 +210,6 @@ class MainActivity : AppCompatActivity() {
     private fun startDemoMode() {
         frequencySmoother.clear()
         isListening = true
-        updateButtonStates()
         statusTextView.text = getString(R.string.status_demo)
 
         recordingThread = Thread {
@@ -246,34 +244,11 @@ class MainActivity : AppCompatActivity() {
         recordingThread?.interrupt()
         recordingThread = null
 
-        audioRecord?.let { releaseAudioRecord(it) }
+        audioRecord?.let { AudioRecordFactory.release(it) }
         audioRecord = null
 
         frequencySmoother.clear()
-        updateButtonStates()
-        renderStoppedState()
-    }
-
-    private fun releaseAudioRecord(record: AudioRecord) {
-        try {
-            if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                record.stop()
-            }
-        } catch (error: IllegalStateException) {
-            Log.d(TAG, "AudioRecord was not in a stoppable state", error)
-        } finally {
-            record.release()
-        }
-    }
-
-    private fun updateButtonStates() {
-        if (isListening) {
-            startButton.visibility = View.GONE
-            stopButton.visibility = View.VISIBLE
-        } else {
-            startButton.visibility = View.VISIBLE
-            stopButton.visibility = View.GONE
-        }
+        renderIdleState()
     }
 
     private fun renderIdleState() {
@@ -283,11 +258,6 @@ class MainActivity : AppCompatActivity() {
         accuracyTextView.text = ""
         statusTextView.text = getString(R.string.status_idle)
         resetTunerDial()
-    }
-
-    private fun renderStoppedState() {
-        renderIdleState()
-        statusTextView.text = getString(R.string.status_stopped)
     }
 
     private fun renderNoSignalState() {
@@ -384,52 +354,6 @@ class MainActivity : AppCompatActivity() {
         return dp * resources.displayMetrics.density
     }
 
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    private fun createAudioRecord(): Pair<AudioRecord, AudioConfig>? {
-        val sampleRates = intArrayOf(48000, 44100, 32000, 22050, 16000)
-        val sources = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            intArrayOf(MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.MIC)
-        } else {
-            intArrayOf(MediaRecorder.AudioSource.MIC)
-        }
-
-        for (source in sources) {
-            for (rate in sampleRates) {
-                val minBuffer = AudioRecord.getMinBufferSize(
-                    rate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                )
-                if (minBuffer <= 0) {
-                    continue
-                }
-
-                val analysisSize = if (rate >= 44100) 4096 else 2048
-                val bufferSizeInBytes = max(minBuffer, analysisSize * 2)
-
-                val record = AudioRecord(
-                    source,
-                    rate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSizeInBytes
-                )
-                if (record.state == AudioRecord.STATE_INITIALIZED) {
-                    return record to AudioConfig(
-                        sampleRate = rate,
-                        bufferSizeInBytes = bufferSizeInBytes,
-                        analysisSize = analysisSize,
-                        audioSource = source
-                    )
-                }
-
-                record.release()
-            }
-        }
-
-        return null
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -444,6 +368,7 @@ class MainActivity : AppCompatActivity() {
             startTuning()
         } else {
             Toast.makeText(this, getString(R.string.permission_required), Toast.LENGTH_LONG).show()
+            statusTextView.text = getString(R.string.permission_required)
         }
     }
 

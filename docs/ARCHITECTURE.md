@@ -12,8 +12,15 @@ Keep Android framework code thin and move the tuner's behavior into deterministi
 4. `NoteMapper` resolves the closest note and target frequency.
 5. `TuningFeedbackEvaluator` converts cents deviation into UI feedback bands.
 6. `MainActivity` renders the resulting state into the dial, note label, and status text.
+7. `ScalePracticeActivity` uses the same detection path to light matching notes on a stave.
 
 ## Core Modules
+
+### `AudioRecordFactory`
+
+- Centralizes `AudioRecord` creation and release behavior shared by the tuner and scale-practice screens
+- Keeps source/rate fallback logic out of the activities
+- Makes the microphone setup path easier to reuse and review
 
 ### `PitchDetector`
 
@@ -39,6 +46,18 @@ Keep Android framework code thin and move the tuner's behavior into deterministi
 - Maps cents thresholds into accuracy bands and a normalized needle offset
 - Centralizes feedback thresholds so they can be tuned and regression-tested
 
+### `ScaleLibrary`
+
+- Defines supported scale formulas such as minor pentatonic, harmonic minor, and major blues
+- Generates one-octave scales for a selected root note in a deterministic way
+- Keeps scale math out of the activity and custom view
+
+### `ScaleStaveView`
+
+- Draws a five-line stave and the selected scale as noteheads
+- Highlights notes that the player has matched from live pitch detection
+- Keeps notation rendering self-contained instead of mixing it into activity code
+
 ## Why This Split Matters
 
 - The important behavior is now testable without emulators or Android framework mocks.
@@ -47,6 +66,6 @@ Keep Android framework code thin and move the tuner's behavior into deterministi
 
 ## Next Refactors
 
-- Move audio session management out of `MainActivity`
 - Add a small UI state model instead of directly mutating views
+- Reduce duplication between the tuner and scale-practice recording loops
 - Expand instrumentation coverage beyond the current permission and start/stop flows

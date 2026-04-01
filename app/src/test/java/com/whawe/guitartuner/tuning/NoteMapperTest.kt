@@ -46,4 +46,12 @@ class NoteMapperTest {
         assertTrue(sharp > 0.0)
         assertTrue(flat < 0.0)
     }
+
+    @Test
+    fun helperMethods_mapMidiAndPitchClasses() {
+        assertEquals("A4", NoteMapper.noteNameForMidi(69))
+        assertEquals("F#", NoteMapper.noteNameForPitchClass(6))
+        assertEquals(1, NoteMapper.pitchClassForNoteName("C#5"))
+        assertEquals(9, NoteMapper.pitchClassForNoteName("A2"))
+    }
 }

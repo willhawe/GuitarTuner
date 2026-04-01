@@ -2,13 +2,11 @@
     <string name="app_name">Bleat Guitar Tuner</string>
     <string name="frequency_placeholder">0.0 Hz</string>
     <string name="no_signal">No signal</string>
-    <string name="button_start">Start Tuning</string>
-    <string name="button_stop">Stop Tuning</string>
-    <string name="status_idle">Tap Start to begin tuning any instrument</string>
+    <string name="button_scale_practice">Scale Practice</string>
+    <string name="status_idle">Listening starts automatically when the app opens.</string>
     <string name="status_listening">Listening for any musical note...</string>
     <string name="status_detecting">Detecting: %1$d Hz</string>
     <string name="status_demo">Demo mode active</string>
-    <string name="status_stopped">Tuning stopped</string>
     <string name="status_audio_error">Audio input error. Check microphone permission.</string>
     <string name="permission_granted">Microphone permission granted.</string>
     <string name="permission_required">Microphone permission is required for tuning.</string>
@@ -18,4 +16,20 @@
     <string name="accuracy_good">Good</string>
     <string name="accuracy_adjust">Adjust</string>
     <string name="accuracy_way_off">Way off</string>
+    <string name="scale_practice_title">Scale Practice</string>
+    <string name="scale_practice_subtitle">Choose a root and scale, then light up the stave by playing matching notes.</string>
+    <string name="scale_root_label">Root note</string>
+    <string name="scale_type_label">Scale type</string>
+    <string name="scale_current_scale_format">%1$s %2$s</string>
+    <string name="scale_current_note_idle">Current note: --</string>
+    <string name="scale_current_note_format">Current note: %1$s (%2$.1f Hz)</string>
+    <string name="scale_played_notes_placeholder">Highlighted scale notes: none</string>
+    <string name="scale_played_notes_format">Highlighted scale notes: %1$s</string>
+    <string name="scale_status_idle">Listening starts automatically when this page opens.</string>
+    <string name="scale_status_listening">Listening for notes in the selected scale...</string>
+    <string name="scale_status_in_scale">%1$s is in the scale.</string>
+    <string name="scale_status_out_of_scale">%1$s is outside the scale.</string>
+    <string name="scale_status_audio_error">Audio input unavailable on this page. Check microphone access.</string>
+    <string name="scale_status_permission_required">Microphone permission is required for scale practice.</string>
+    <string name="scale_button_reset">Reset Highlights</string>
 </resources>

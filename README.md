@@ -14,7 +14,8 @@ Get the app on Google Play: <https://play.google.com/store/apps/details?id=com.w
 
 - Real-time pitch detection using a YIN-style estimator over PCM microphone input
 - Chromatic note mapping with cents deviation and a continuous tuner needle
-- Median smoothing to stabilize noisy real-world readings
+- Adaptive smoothing to stabilize noisy real-world readings without sticking
+- A scale-practice page with root/scale selection and a live highlighting stave
 - Demo fallback for environments where microphone capture is unavailable
 - No ads, no in-app upsell flow, and no locked "premium" tuning features
 - Local-only processing with no network permission and no analytics
@@ -22,10 +23,13 @@ Get the app on Google Play: <https://play.google.com/store/apps/details?id=com.w
 ## Architecture
 
 - `MainActivity` owns Android lifecycle, permission handling, and view binding
+- `ScalePracticeActivity` reuses live pitch detection for scale drilling on a stave
+- `AudioRecordFactory` centralizes `AudioRecord` setup shared by both listening screens
 - `PitchDetector` implements the YIN-style pitch estimator over raw `ShortArray` PCM frames
 - `FrequencySmoother` applies adaptive log-scale smoothing for stable but responsive note presentation
 - `NoteMapper` converts detected frequencies into note names and target frequencies
 - `TuningFeedbackEvaluator` maps cents deviation into user-facing tuning states
+- `ScaleLibrary` and `ScaleStaveView` handle scale generation and notation rendering
 
 More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -34,7 +38,7 @@ More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 The test strategy focuses on deterministic coverage of the logic that matters most:
 
 - note mapping and cents calculations
-- smoothing window behavior
+- adaptive smoothing behavior
 - threshold-based tuning feedback
 - synthetic PCM regression tests for multiple reference pitches and sample rates
 
